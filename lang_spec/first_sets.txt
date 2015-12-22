@@ -1,0 +1,125 @@
+﻿First Sets
+FIRST(<program>) 
+	= { KW_T(PLATYPUS) }
+
+FIRST(<opt_statements>) 
+	= { FIRST(<statements>), ɛ }
+	= { AVID_T, SVID_T, KW_T(IF), KW_T(USING), KW_T(INPUT) , KW_T(OUTPUT), ɛ }
+
+FIRST(<statements>)
+	= { FIRST(<statement>) }
+	= { FIRST(<assignment statement>), FIRST(<selection statement>), FIRST(<iteration statement>), FIRST(<input statement>), FIRST(<output statement>) }
+	= { AVID_T, SVID_T, KW_T(IF), KW_T(USING), KW_T(INPUT) , KW_T(OUTPUT) }
+
+FIRST(<statements_p>)
+	= {FIRST(<statement>), ɛ }
+	= { AVID_T, SVID_T, KW_T(IF), KW_T(USING), KW_T(INPUT) , KW_T(OUTPUT), ɛ }
+
+FIRST(<statement>)
+	= { FIRST(<assignment statement>), FIRST(<selection statement>), FIRST(<iteration statement>), FIRST(<input statement>), FIRST(<output statement>) }
+	= { AVID_T, SVID_T, KW_T(IF), KW_T(USING), KW_T(INPUT) , KW_T(OUTPUT) }
+
+FIRST(<assignment statement>)
+	= { FIRST(<assignment expression>) }
+	= { AVID_T, SVID_T }
+
+FIRST(<assignment expression>)
+	= { AVID_T, SVID_T }
+
+FIRST(<selection statement>)
+	= { KW_T(IF) }
+
+FIRST(<iteration statement>)
+	= { KW_T(USING) }
+
+FIRST(<input statement>)
+	= { KW_T(INPUT) }
+
+FIRST(<variable list>)
+	= { FIRST(<variable identifier>) }
+	= { AVID_T, SVID_T }
+
+FIRST(<variable list p>)
+	= { COM_T, ɛ }
+
+FIRST(<variable identifier>)
+	= { AVID_T, SVID_T }
+
+FIRST(<output statement>)
+	= { KW_T(OUTPUT) }
+
+FIRST(<output list>)
+	= { STR_T, FIRST(<variable list>), ɛ }
+	= { STR_T, AVID_T, SVID_T, ɛ }
+
+FIRST(<arithmetic expression>)
+	= { FIRST(<unary arithmetic expression>), FIRST(<additive arithmetic expression>) }
+	= { ART_OP_T(PLUS), ART_OP_T(MINUS), AVID_T, FPL_T, INL_T, LPR_T }
+
+FIRST(<unary arithmetic expression>)
+	= { ART_OP_T(PLUS), ART_OP_T(MINUS) }
+
+FIRST(<additive arithmetic expression>)
+	= { FIRST(<multiplicative arithmetic expression>) }
+	= { FIRST(<primary arithmetic expression>) }
+	= { AVID_T, FPL_T, INL_T, LPR_T }
+
+FIRST(<additive arithmetic expression p>)
+	= { ART_OP_T(PLUS), ART_OP_T(MINUS), ɛ }
+
+FIRST(<multiplicative arithmetic expression>)
+	= { FIRST(<primary arithmetic expression> }
+	= { AVID_T, FPL_T, INL_T, LPR_T }
+
+FIRST(<multiplicative arithmetic expression p>)
+	= { ART_OP_T(MULT), ART_OP_T(DIV), ɛ }
+
+FIRST(<primary arithmetic expression>)
+	= { AVID_T, FPL_T, INL_T, LPR_T }
+
+FIRST(<string expression>)
+	= { FIRST(<primary string expression>) }
+	= { SVID_T, STR_T }
+
+FIRST(<string expression p>)
+	= { SCC_OP_T, ɛ }
+
+FIRST(<primary string expression>)
+	= { SVID_T, STR_T }
+
+FIRST(<conditional expression>)
+	= { FIRST(<logical OR expression>) }
+	= { SVID_T, STR_T, AVID_T, FPL_T, INL_T }
+
+FIRST(<logical OR expression>)
+	= { FIRST(<logical AND expression>) }
+	= { FIRST(<relational expression>) }
+	= { SVID_T, STR_T, AVID_T, FPL_T, INL_T }
+
+FIRST(<logical OR expression p>)
+	= { LOG_OP_T(.OR.), ɛ }
+
+FIRST(<logical AND expression>)
+	= { FIRST(relational expression) }
+	= { SVID_T, STR_T, AVID_T, FPL_T, INL_T }
+
+FIRST(<logical AND expression p>)
+	= { LOG_OP_T(.AND.), ɛ }
+
+FIRST(<relational expression>)
+	= { FIRST(<primary a_relational expression>), FIRST(<primary s_relational expression>) }
+	= { SVID_T, STR_T, AVID_T, FPL_T, INL_T }
+
+FIRST(<primary a_relational expression p>)
+	= { REL_OP_T(EQ), REL_OP_T(NE), REL_OP_T(LT), REL_OP_T(GT) }
+
+FIRST(<primary s_relational expression p>)
+	= { REL_OP_T(EQ), REL_OP_T(NE), REL_OP_T(LT), REL_OP_T(GT) }
+
+FIRST(<primary a_relational expression>)
+	= { AVID_T, FPL_T, INL_T }
+
+FIRST(<primary s_relational expression>)
+	= { FIRST(<primary string expression>) }
+	= { SVID_T, STR_T }
+

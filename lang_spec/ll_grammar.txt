@@ -1,0 +1,206 @@
+Platypus Language Specification
+3.1 PLATYPUS program
+<program> -> PLATYPUS { <opt_statements> }
+
+<opt_statements > -> <statements>| ɛ
+ 
+original: 
+<statements> -> <statement> | <statements> <statement>
+
+modified by removing left recursion:
+<statements> -> <statement><statements_p>
+<statements_p> -> <statement><statements_p>|ɛ
+
+
+3.2 Statements
+<statement> ->
+  <assignment statement>
+| <selection statement>
+| <iteration statement>
+| <input statement>
+| <output statement>
+
+3.2.1 Assignment statement
+<assignment statement> -> <assignment expression>;
+
+<assignment expression> -> 
+	  AVID = <arithmetic expression>
+	| SVID = <string expression>
+
+
+3.2.2 Selection statement (if statement)
+<selection statement> ->
+  IF (<conditional expression>)  THEN  <opt_statements> 
+  ELSE { <opt_statements> } ;
+
+3.2.3  Iteration Statement (the loop statement)
+<iteration statement> ->
+USING  (<assignment expression> , <conditional expression> , <assignment expression>)
+REPEAT {
+     < opt_statements>
+	};
+
+3.2.4 Input statement
+<input statement> -> INPUT (<variable list>);
+
+original:
+<variable list> -> <variable identifier> | <variable list>,<variable identifier>
+
+modified by removing left recursion:
+<variable list> -> <variable identifier><variable list p>
+<variable list p> -> ,<variable identifier><variable list p>| ɛ
+
+<variable identifier> -> AVID_T | SVID_T
+
+3.2.5 Output Statement  
+original: 
+<output statement> -> OUTPUT (<opt_variable list>); | OUTPUT (STR_T);
+
+modified by left factoring:
+<output statement> -> OUTPUT(<output list>);
+<output list> -> <variable list> | STR_T | ɛ;
+
+
+3.3 Arithmetic Expressions
+<arithmetic expression> - >
+  <unary arithmetic expression>  
+| <additive arithmetic expression>	
+
+<unary arithmetic expression> ->
+	-  <primary arithmetic expression> 
+  | + <primary arithmetic expression>
+
+original:
+<additive arithmetic expression> ->
+  <additive arithmetic expression> +  <multiplicative arithmetic expression>
+| <additive arithmetic expression>  -  <multiplicative arithmetic expression>
+| <multiplicative arithmetic expression>
+
+modified by removing left recursion:
+<additive arithmetic expression> ->
+      <multiplicative arithmetic expression><additive arithmetic expression p>
+<additive arithmetic expression p> ->
+     +<multiplicative arithmetic expression><additive arithmetic expression p>
+   | -<multiplicative arithmetic expression><additive arithmetic expression p>
+   | ɛ
+
+original:  
+<multiplicative arithmetic expression> ->
+  <multiplicative arithmetic expression> * <primary arithmetic expression>
+| <multiplicative arithmetic expression> / <primary arithmetic expression>
+| <primary arithmetic expression>
+
+modified by removing left recursion:
+<multiplicative arithmetic expression> ->
+    <primary arithmetic expression><multiplicative arithmetic expression p>
+<multiplicative arithmetic expression p> ->
+	  *<primary arithmetic expression><multiplicative arithmetic expression p> 
+  | /<primary arithmetic expression><multiplicative arithmetic expression p>
+  | ɛ
+
+<primary arithmetic expression> ->
+  AVID_T
+| FPL_T
+| INL_T
+| (<arithmetic expression>)	
+
+3.3.2 String Expression
+original: 
+<string expression> -> 
+     <primary string expression> | <string expression>  #  <primary string expression>
+
+modified by removing left recursion:
+<string expression> -> <primary string expression><string expression p>
+<string expression p> -> # <primary string expression><string expression p> | ɛ
+
+<primary string expression> -> SVID_T | STR_T
+
+3.3.3 Conditional Expression
+<conditional expression> -> <logical OR expression>
+
+original: 
+<logical OR expression> -> 
+	<logical AND expression> | <logical OR expression> .OR. <logical AND expression>
+
+modified by removing left recursion:
+<logical OR expression> -> <logical AND expression><logical OR expression p>
+<logical OR expression p> -> .OR. <logical AND expression><logical OR expression p>| ɛ
+
+original:
+<logical AND expression> -> 
+	<relational expression> | <logical AND expression> .AND. <relational expression>
+
+modified by removing left recursion:
+<logical AND expression> -> <relational expression><logical AND expression p>
+<logical AND expression p> -> .AND. <relational expression><logical AND expression p>| ɛ
+
+
+3.3.4 Relational expression
+original: 
+<relational expression> -> 
+	<primary a_relational expression>  ==  <primary a_relational expression>
+  | <primary a_relational  expression>  <>  <primary a_relational  expression>
+  | <primary a_relational  expression>  >   <primary a_relational  expression>
+  | <primary a_relational expression>  <   <primary a_relational expression>
+  | <primary s_relational expression>  ==  <primary s_relational expression>
+  | <primary s_relational  expression>  <>  <primary s_relational  expression>
+  | <primary s_relational  expression>  >   <primary s_relational  expression>
+  | <primary s_relational expression>  <   <primary s_relational expression>
+
+modified by left factoring:
+<relational expression> ->
+	  <primary a_relational expression><primary a_relational expression p>
+  | <primary s_relational expression><primary s_relational expression p>
+
+<primary a_relational expression p> ->
+	  == <primary a_relational expression>
+  | <> <primary a_relational expression>
+  | < <primary a_relational expression>
+  | > <primary a_relational expression>
+
+<primary s_relational expression p> ->
+	  == <primary s_relational expression>
+  | <> <primary s_relational expression>
+  | < <primary s_relational expression>
+  | > <primary s_relational expression>
+
+<primary a_relational expression> ->
+  AVID_T
+| FPL_T
+| INL_T
+	
+<primary s_relational expression> -> <primary string expression>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
