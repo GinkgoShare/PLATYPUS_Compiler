@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: stack.c
-Compiler: MS Visual Studio 2012
+Compiler: Borland 5.5
 Author: Christopher Elliott, 040 570 022
 Course: CST 8152 - Compilers, Lab Section : 012
 Date: 06/12/2015 (DD/MM/YYYY)
