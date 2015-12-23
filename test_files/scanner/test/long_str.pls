@@ -1,0 +1,5 @@
+PLATYPUS {
+	aaaaaaaaBBBBBBBBBBBBCCCCCCCCCCCCCC% = "string literal";
+	bbbbbbbbAAAAAAAAAAAACCCCCCCCCCCCCC% = "another string";
+	printf(aaaaaaaaBBBBBBBBBBBBCCCCCCCCCCCCCC% + bbbbbbbbAAAAAAAAAAAACCCCCCCCCCCCCC%);
+}

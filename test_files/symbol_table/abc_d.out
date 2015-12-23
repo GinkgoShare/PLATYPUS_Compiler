@@ -1,0 +1,82 @@
+Reading file abc.pls ....Please wait
+
+Printing input buffer parameters:
+
+The capacity of the buffer is:  121
+The current size of the buffer is:  120
+The reallocation flag is:   0
+
+Printing input buffer contents:
+
+PLATYPUS {
+	s;b;d;e;y;f;h;a;i;v;j;k;l;m;c;n;o;q;r;t;u;w;x;z;g;p;
+	j;i;h;g;f;r;q;p;o;n;m;l;k;e;d;c;b;a;z;y;x;w;v;u;t;s;
+}
+Scanning source file...
+
+
+Symbol Table
+____________
+
+Line Number Variable Identifier
+ 2          s
+ 2          b
+ 2          d
+ 2          e
+ 2          y
+ 2          f
+ 2          h
+ 2          a
+ 2          i
+ 2          v
+ 2          j
+ 2          k
+ 2          l
+ 2          m
+ 2          c
+ 2          n
+ 2          o
+ 2          q
+ 2          r
+ 2          t
+ 2          u
+ 2          w
+ 2          x
+ 2          z
+ 2          g
+ 2          p
+
+Sorting symbol table...
+
+Symbol Table
+____________
+
+Line Number Variable Identifier
+ 2          z
+ 2          y
+ 2          x
+ 2          w
+ 2          v
+ 2          u
+ 2          t
+ 2          s
+ 2          r
+ 2          q
+ 2          p
+ 2          o
+ 2          n
+ 2          m
+ 2          l
+ 2          k
+ 2          j
+ 2          i
+ 2          h
+ 2          g
+ 2          f
+ 2          e
+ 2          d
+ 2          c
+ 2          b
+ 2          a
+
+Collecting garbage...
