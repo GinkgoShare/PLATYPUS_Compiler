@@ -51,7 +51,7 @@ extern int line; /* source code line number - defined in scanner.c */
 /* function declarations (prototypes) */
 extern void parser(Buffer * sc_buf);
 /* For testing purposes */
- extern void scanner_init(Buffer * sc_buf);
+extern void scanner_init(Buffer * sc_buf);
 /* extern Token malpar_next_token(Buffer * sc_buf);*/
 
 void err_printf(char *fmt, ...);

@@ -41,14 +41,6 @@ Function list: scanner_init(), mlwpar_next_token(), get_next_state(), char_class
 #define CR 13	/* ASCII code for carriage return */
 #define SP 32	/* ASCII code for space */
 
-/* Global objects - variables */
-/* This buffer is used as a repository for string literals.
-   It is defined in platy_st.c */
-extern Buffer * str_LTBL;	/*String literal table */
-int line;					/* current line number of the source code */
-extern int scerrnum;		/* defined in platy_st.c - run-time error number */
-extern STD sym_table;		/* Symbol Table Descriptor */
-
 /* counts new line char */
 #define n_line(c, buffer) if (c == CR && b_getc(buffer) != LF) { b_retract(buffer); } ++line;
 
@@ -57,6 +49,15 @@ extern STD sym_table;		/* Symbol Table Descriptor */
 							if (lexeme) free(lexeme); \
 							st_store(sym_table); \
 							exit(EXIT_FAILURE);
+
+/* Global objects - variables */
+/* This buffer is used as a repository for string literals.
+   It is defined in platy_st.c */
+extern Buffer * str_LTBL;	/*String literal table */
+extern int scerrnum;		/* defined in platy_st.c - run-time error number */
+extern STD sym_table;		/* Symbol Table Descriptor */
+
+int line;					/* current line number of the source code */
 
 /* Local(file) global objects - variables */
 static Buffer *lex_buf;/*pointer to temporary lexeme buffer*/
@@ -70,7 +71,7 @@ static int iskeyword(char * kw_lexeme); /*keywords lookup functuion */
 static long atool(char * lexeme); /* converts octal string to decimal value */
 
 /* function declarations */
-static Token run_time_err();
+static Token run_time_err(void);
 static Token set_err_t(unsigned int, Buffer*);
 
 int scanner_init(Buffer * sc_buf) {
@@ -103,7 +104,7 @@ Token mlwpar_next_token(Buffer * sc_buf) {
 	int accept = NOAS;	/* type of state - initially not accepting */
 
 	for (;;) {
-		b_setmark(sc_buf, (b_getc_offset(sc_buf)));
+		b_setmark(sc_buf, b_getc_offset(sc_buf));
 		c = b_getc(sc_buf);
 		switch (c) {
 		case '\0': case 0xFF:
@@ -295,7 +296,7 @@ Token aa_func02(char lexeme[]) {
 	i = iskeyword(lexeme);
 	if (i == KWT_SIZE) {
 		t.code = AVID_T;
-		for (i = 0; i < VID_LEN && lexeme[i]; vid_lex[i] = lexeme[i++]) ;
+		for (i = 0; i < VID_LEN && lexeme[i]; i++) vid_lex[i] = lexeme[i];
 		vid_lex[i] = '\0';
 		switch(lexeme[0]) {
 		case 'i': case 'o': case 'd': case 'w':
@@ -327,7 +328,7 @@ Token aa_func03(char lexeme[]) {
 	char vid_lex[VID_LEN+1];
 	t.code = SVID_T;
 	/* store lexeme in vid_lex array */
-	for (i = 0; i < VID_LEN && lexeme[i]; i++) { vid_lex[i] = (i < (VID_LEN-1)) ? lexeme[i] : '%'; }
+	for (i = 0; i < VID_LEN && lexeme[i]; i++) vid_lex[i] = (i < (VID_LEN-1)) ? lexeme[i] : '%';
 	vid_lex[i] = '\0';
 	if ((t.attribute.vid_offset = st_install(sym_table, vid_lex, 'S', line)) < 0) { sym_tbl_err(lexeme) }
 	return t;
@@ -455,7 +456,7 @@ History/Versions: 1.0 / 27 October 2015
 Called functions: strcpy()
 Return value: run-time error token
 *******************************************************************************/
-static Token run_time_err() {
+static Token run_time_err(void) {
 	Token t;  /* token to return */
 	t.code = ERR_T;
 	strcpy(t.attribute.err_lex, "RUN TIME ERROR: ");
@@ -473,13 +474,14 @@ Parameters:lex_len - length of the lexeme,
 Return value: error Token 
 *******************************************************************************/
 static Token set_err_t(unsigned int lex_len, Buffer* buffer) {
-	char c;
+	unsigned char c;
 	Token t;
 	unsigned int i;
 	if (buffer == NULL) { return run_time_err(); }
 	t.code = ERR_T;
 	b_retract_to_mark(buffer);
-	for (i = 0, c = b_getc(buffer); i < lex_len && c != '\0' && c != 0xFF; ++i, c = b_getc(buffer))
+	for (i = 0, c = (unsigned char)b_getc(buffer); i < lex_len && c != '\0' && c != 0xFF;
+		++i, c = (unsigned char)b_getc(buffer))
 		t.attribute.err_lex[i] = (i < ERR_LEN-3) ? c : '.';
 	if (i == lex_len) { b_retract(buffer); }
 	t.attribute.err_lex[i] = '\0';
