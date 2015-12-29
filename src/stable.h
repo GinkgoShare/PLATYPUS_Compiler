@@ -63,5 +63,6 @@ static void st_setsize(void);
 static void st_incoffset(void);
 int st_store(STD sym_table);
 int st_sort(STD sym_table, char s_order);
+STVR* st_get_value(STD sym_table, int vid_offset);
 
 #endif

@@ -374,3 +374,13 @@ static int buffer_sort(void) {
 	sym_table.plsBD = sort_buf;
 	return 1;
 }
+/*******************************************************************************
+Purpose: retrieves an entry within the symbol table
+Author: Christopher Elliott, 040 570 022
+History/Versions: 1.0 / 28 December 2015
+Parameters: STD sym_table, int vid_offset
+Return value: STVR*
+*******************************************************************************/
+STVR* st_get_value(STD sym_table, int vid_offset) {
+	return sym_table.pstvr + vid_offset;
+}

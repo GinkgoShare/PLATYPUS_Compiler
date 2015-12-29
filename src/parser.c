@@ -78,16 +78,18 @@ void match(int pr_token_code, int pr_token_attribute) {
 			syn_eh(pr_token_code); return;
 		case SVID_T: case STR_T:
 			/* add strings to dynamic buffer in order of appearance which represents concatenation */
-			if (str_exp_asys && lookahead.attribute.str_offset >= 0) {
-				int i;
-				char* str = b_setmark(str_LTBL, lookahead.attribute.str_offset);
+			if (str_exp_asys) {
+				int i, mark; char* str;
+				mark = lookahead.code == SVID_T ? 
+					st_get_value(sym_table, lookahead.attribute.vid_offset)->i_value.str_offset : 
+					lookahead.attribute.str_offset;
 				#ifdef DEBUG
-					printf("String literal: %s\n", str);
+				printf("mark = %d;\n", mark);
 				#endif
-				for (i=0; str[i]; ++i) b_addc(str_eval, str[i]);
-				#ifdef DEBUG
-					printf("String literal: %s\n", b_setmark(str_eval, 0));
-				#endif
+				if (mark >= 0) { 
+					str = b_setmark(str_LTBL, mark);
+					for (i=0; str[i]; ++i) b_addc(str_eval, str[i]);
+				}
 			}
 			break;
 		case AVID_T: case INL_T: case FPL_T:
