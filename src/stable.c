@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: stable.c
-Compiler: Borland 5.5
+Compiler: MS Visual Studio 2012
 Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 3
@@ -17,6 +17,9 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #include <string.h>
 #include "buffer.h"
 #include "stable.h"
+
+#define DEBUG
+/*#undef DEBUG*/
 
 extern STD sym_table; /* global sym_table variable */
 
@@ -86,7 +89,7 @@ int st_install(STD sym_table, char *lexeme, char type, int line) {
 			record.status_field = record.status_field | FTYPE;
 			break;
 		case 'S':
-			record.i_value.str_offset = R_FAIL_1;
+			record.i_value.str_offset = EPSILON;
 			record.status_field = record.status_field | STYPE;
 			break;
 		default:
@@ -158,7 +161,13 @@ Return value: int vid_offset or -1 if fail
 *******************************************************************************/
 int st_update_value(STD sym_table, int vid_offset, InitialValue i_value) {
 	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;
+	#ifdef DEBUG
+	printf("Before update value = %d;\n", sym_table.pstvr[vid_offset].i_value);
+	#endif
 	sym_table.pstvr[vid_offset].i_value = i_value;
+	#ifdef DEBUG
+	printf("After update value = %d;\n", sym_table.pstvr[vid_offset].i_value);
+	#endif
 	return vid_offset;
 }
 

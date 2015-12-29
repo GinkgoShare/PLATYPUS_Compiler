@@ -27,6 +27,7 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #define INIT_SZ 10			/* initial size of the symbold table buffer */
 #define INC_FCTR 10			/* increment factor of the symbold table buffer */
 #define BIT_SHFT 15			/* shifting value for bitwise operation */
+#define EPSILON (-1)		/* empty string value for string offset */
 
 typedef union InitialValue {
 	int int_val;							/* integer variable initial value */

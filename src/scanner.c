@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: scanner.c
-Compiler: Borland 5.5
+Compiler: MS Visual Studio 2012
 Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 2
@@ -41,6 +41,19 @@ Function list: scanner_init(), mlwpar_next_token(), get_next_state(), char_class
 #define CR 13	/* ASCII code for carriage return */
 #define SP 32	/* ASCII code for space */
 
+#define MAX_ISZ 32767		/* max range for a PLATYPUS int */
+#define MIN_ISZ (-32768)	/* min range for a PLATYPUS int */
+#define MAX_FSZ 3.4E+38		/* max range for a PLATYPUS float */
+#define MIN_FSZ 1.2E-38		/* min range for a PLATYPUS float */
+
+/* Global objects - variables */
+/* This buffer is used as a repository for string literals.
+   It is defined in platy_st.c */
+extern Buffer * str_LTBL;	/* String literal table */
+int line;					/* current line number of the source code */
+extern int scerrnum;		/* defined in platy_st.c - run-time error number */
+extern STD sym_table;		/* Symbol Table Descriptor */
+
 /* counts new line char */
 #define n_line(c, buffer) if (c == CR && b_getc(buffer) != LF) { b_retract(buffer); } ++line;
 
@@ -49,15 +62,6 @@ Function list: scanner_init(), mlwpar_next_token(), get_next_state(), char_class
 							if (lexeme) free(lexeme); \
 							st_store(sym_table); \
 							exit(EXIT_FAILURE);
-
-/* Global objects - variables */
-/* This buffer is used as a repository for string literals.
-   It is defined in platy_st.c */
-extern Buffer * str_LTBL;	/*String literal table */
-extern int scerrnum;		/* defined in platy_st.c - run-time error number */
-extern STD sym_table;		/* Symbol Table Descriptor */
-
-int line;					/* current line number of the source code */
 
 /* Local(file) global objects - variables */
 static Buffer *lex_buf;/*pointer to temporary lexeme buffer*/
@@ -296,7 +300,7 @@ Token aa_func02(char lexeme[]) {
 	i = iskeyword(lexeme);
 	if (i == KWT_SIZE) {
 		t.code = AVID_T;
-		for (i = 0; i < VID_LEN && lexeme[i]; i++) vid_lex[i] = lexeme[i];
+		for (i = 0; i < VID_LEN && lexeme[i]; ++i) vid_lex[i] = lexeme[i];
 		vid_lex[i] = '\0';
 		switch(lexeme[0]) {
 		case 'i': case 'o': case 'd': case 'w':
@@ -316,15 +320,15 @@ Token aa_func02(char lexeme[]) {
 Purpose: Accepting function for the string variable identifier
 Author: Jeremy Chen, 040 742 822
 History/Versions: 1.0 / 27 October 2015
-Called functions:
+Called functions: st_install(), sym_tbl_err()
 Parameters: lexeme array of characters
 Return value: returns the Token
 Algorithm: Set SVID token. Store only the first VID_LEN - 1 chars into vid_lex 
 		   array. Add % to the name, add \0 to the end and then return token.
 *******************************************************************************/
 Token aa_func03(char lexeme[]) {
-	int i;		/* counter */
-	Token t;	/* token to return */
+	int i; /* counter */
+	Token t; /* token to return */
 	char vid_lex[VID_LEN+1];
 	t.code = SVID_T;
 	/* store lexeme in vid_lex array */
@@ -351,7 +355,7 @@ Token aa_func05(char lexeme[]) {
 	if (strlen(lexeme) > INL_LEN) { return aa_func12(lexeme); }
 	val = atol(lexeme);
 	/* if int out of range, set error token, otherwise store value in the attribute */
-	if (val < SHRT_MIN || val > SHRT_MAX) { return aa_func12(lexeme); }
+	if (val < MIN_ISZ || val > MAX_ISZ) { return aa_func12(lexeme); }
 	t.code = INL_T;
 	t.attribute.int_value = (int)val;
 	return t;
@@ -372,7 +376,7 @@ Token aa_func08(char lexeme[]) {
 	double val; /* floating-point value */
 	val = atof(lexeme);
 	/* if float out of range, set error token, otherwise store value in the attribute */
-	if ((val < FLT_MIN || val > FLT_MAX) && val != 0.0) { return aa_func12(lexeme); }
+	if ((val < MIN_FSZ || val > MAX_FSZ) && val != 0.0) { return aa_func12(lexeme); }
 	t.code = FPL_T;
 	t.attribute.flt_value = (float)val;
 	return t;
@@ -395,7 +399,7 @@ Token aa_func10(char lexeme[]) {
 	if (strlen(lexeme) > (INL_LEN+1)) { return aa_func12(lexeme); }
 	val = atool(lexeme);
 	/* if int out of range, set error token, otherwise store value in the attribute */
-	if (val < SHRT_MIN || val > SHRT_MAX) { return aa_func12(lexeme); }
+	if (val < MIN_ISZ || val > MAX_ISZ) { return aa_func12(lexeme); }
 	t.code = INL_T;
 	t.attribute.int_value = (int)val;
 	return t;
@@ -474,14 +478,13 @@ Parameters:lex_len - length of the lexeme,
 Return value: error Token 
 *******************************************************************************/
 static Token set_err_t(unsigned int lex_len, Buffer* buffer) {
-	unsigned char c;
+	char c;
 	Token t;
 	unsigned int i;
 	if (buffer == NULL) { return run_time_err(); }
 	t.code = ERR_T;
 	b_retract_to_mark(buffer);
-	for (i = 0, c = (unsigned char)b_getc(buffer); i < lex_len && c != '\0' && c != 0xFF;
-		++i, c = (unsigned char)b_getc(buffer))
+	for (i = 0, c = b_getc(buffer); i < lex_len && c != '\0' && c != 0xFF; ++i, c = b_getc(buffer))
 		t.attribute.err_lex[i] = (i < ERR_LEN-3) ? c : '.';
 	if (i == lex_len) { b_retract(buffer); }
 	t.attribute.err_lex[i] = '\0';

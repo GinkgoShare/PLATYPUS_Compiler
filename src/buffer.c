@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: buffer.c
-Compiler: Borland 5.5
+Compiler: MS Visual Studio 2013
 Author: Christopher Elliott, 040 570 022
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 1

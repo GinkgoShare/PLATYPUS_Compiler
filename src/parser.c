@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: parser.c
-Compiler: Borland 5.5
+Compiler: MS Visual Studio 2012
 Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 4
@@ -8,8 +8,10 @@ Date: 11 December 2015
 Professor: Sv. Ranev
 Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 *******************************************************************************/
-
 #include "parser.h"
+
+#define DEBUG
+/*#undef DEBUG*/
 
 extern STD sym_table;								/* Symbol Table Descriptor */
 extern Buffer * str_LTBL;							/* String literal table */
@@ -19,18 +21,27 @@ extern char * kw_table[];
 
 extern Token mlwpar_next_token(Buffer * sc_buf);
 
-static Token lookahead;
 static Buffer* sc_buf;
-static Stack* stack;
+
+static Token lval;
+static InitialValue rval;
+static Token lookahead;
+
+static Stack* assign_stack;
+static Stack* operators;
+static Stack* operands;
+static Buffer* str_eval;
 
 int synerrno;
-int semsys;
+int assign_asys, ar_exp_asys, str_exp_asys;
 
 /*
 Author: Sv.Ranev
 */
 void parser(Buffer * in_buf) {
 	sc_buf = in_buf;
+	str_eval = b_create(10, 10, 'a');
+	assign_asys = ar_exp_asys = str_exp_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	program(); match(SEOF_T, NO_ATTR);
 	gen_incode("PLATY: Source file parsed");
@@ -47,6 +58,8 @@ Return value: void
 void match(int pr_token_code, int pr_token_attribute) {
 	if (lookahead.code == pr_token_code) {
 		if (lookahead.code == SEOF_T) return;
+		/* push until we reach stack capacity */
+		if (assign_asys && !s_push(assign_stack, &lookahead)) assign_asys = 0;
 		switch(pr_token_code) {
 		case KW_T:
 			if (lookahead.attribute.kwt_idx == pr_token_attribute) break;
@@ -55,13 +68,32 @@ void match(int pr_token_code, int pr_token_attribute) {
 			if (lookahead.attribute.log_op == pr_token_attribute) break;
 			syn_eh(pr_token_code); return;
 		case ART_OP_T:
-			if (lookahead.attribute.arr_op == pr_token_attribute) break;
+			if (lookahead.attribute.arr_op == pr_token_attribute) {
+				if (ar_exp_asys) s_push(operands, &lookahead);
+				break;
+			}
 			syn_eh(pr_token_code); return;
 		case REL_OP_T:
 			if (lookahead.attribute.rel_op == pr_token_attribute) break;
 			syn_eh(pr_token_code); return;
-		case AVID_T: case ASS_OP_T: case INL_T: case FPL_T: case EOS_T:
-			if (semsys && !s_push(stack, &lookahead)) semsys = 0; /* push until we reach stack capacity */
+		case SVID_T: case STR_T:
+			/* add strings to dynamic buffer in order of appearance which represents concatenation */
+			if (str_exp_asys && lookahead.attribute.str_offset >= 0) {
+				int i;
+				char* str = b_setmark(str_LTBL, lookahead.attribute.str_offset);
+				#ifdef DEBUG
+					printf("String literal: %s\n", str);
+				#endif
+				for (i=0; str[i]; ++i) b_addc(str_eval, str[i]);
+				#ifdef DEBUG
+					printf("String literal: %s\n", b_setmark(str_eval, 0));
+				#endif
+			}
+			break;
+		case AVID_T: case INL_T: case FPL_T:
+			if (ar_exp_asys)
+				if (pr_token_code == AVID_T || pr_token_code == INL_T || pr_token_code == FPL_T)
+					s_push(operands, &lookahead);
 			break;
 		}
 		if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
@@ -97,17 +129,17 @@ void syn_printe(void) {
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
 	printf("*****  Token code:%3d Attribute: ",t.code);
 	switch(t.code){
-		case  ERR_T: /* ERR_T     0   Error token */
+		case ERR_T: /* ERR_T     0   Error token */
 			printf("%s\n",t.attribute.err_lex);
 			break;
-		case  SEOF_T: /*SEOF_T    1   Source end-of-file token */
+		case SEOF_T: /*SEOF_T    1   Source end-of-file token */
 			printf("NA\n" );
 			break;
-		case  AVID_T: /* AVID_T    2   Arithmetic Variable identifier token */
-		case  SVID_T :/* SVID_T    3  String Variable identifier token */
+		case AVID_T: /* AVID_T    2   Arithmetic Variable identifier token */
+		case SVID_T :/* SVID_T    3  String Variable identifier token */
 			printf("%s\n",sym_table.pstvr[t.attribute.get_int].plex);
 			break;
-		case  FPL_T: /* FPL_T     4  Floating point literal token */
+		case FPL_T: /* FPL_T     4  Floating point literal token */
 			printf("%5.1f\n",t.attribute.flt_value);
 			break;
 		case INL_T: /* INL_T      5   Integer literal token */
@@ -119,22 +151,22 @@ void syn_printe(void) {
 		case SCC_OP_T: /* 7   String concatenation operator token */
 			printf("NA\n" );
 			break;	
-		case  ASS_OP_T:/* ASS_OP_T  8   Assignment operator token */
+		case ASS_OP_T:/* ASS_OP_T  8   Assignment operator token */
 			printf("NA\n" );
 			break;
-		case  ART_OP_T:/* ART_OP_T  9   Arithmetic operator token */
+		case ART_OP_T:/* ART_OP_T  9   Arithmetic operator token */
 			printf("%d\n",t.attribute.get_int);
 			break;
-		case  REL_OP_T: /*REL_OP_T  10   Relational operator token */ 
+		case REL_OP_T: /*REL_OP_T  10   Relational operator token */ 
 			printf("%d\n",t.attribute.get_int);
 			break;
-		case  LOG_OP_T:/*LOG_OP_T 11  Logical operator token */
+		case LOG_OP_T:/*LOG_OP_T 11  Logical operator token */
 			printf("%d\n",t.attribute.get_int);
 			break;	
-		case  LPR_T: /*LPR_T    12  Left parenthesis token */
+		case LPR_T: /*LPR_T    12  Left parenthesis token */
 			printf("NA\n" );
 			break;
-		case  RPR_T: /*RPR_T    13  Right parenthesis token */
+		case RPR_T: /*RPR_T    13  Right parenthesis token */
 			printf("NA\n" );
 			break;
 		case LBR_T: /*    14   Left brace token */
@@ -168,29 +200,6 @@ Return value: void
 void gen_incode(char* string) {
 	printf("%s\n", string);
 }
-
-/*
-Purpose: return the expression type for assignment
-Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
-History/Versions: 1.0 / 11 December 2015
-Called functions: s_pop(), st_get_type()
-Parameters: void
-Return value: type - char value representing the datatype of the expression,
-			  -1 on failure
-
-char get_exp_type(void) {
-	Token* t;
-	char type;
-	if (!s_isempty(stack)) return -1;
-	for (type = 'I', t = (Token*)s_pop(stack); t && t->code != ASS_OP_T; t = (Token*)s_pop(stack)) {
-		if (t->code == FPL_T || (t->code == AVID_T && st_get_type(sym_table, t->attribute.vid_offset) == 'F')) {
-			type = 'F'; break;
-		} else if (t->code == STR_T || t->code == SVID_T) { type = 'S'; break; }
-	}
-	for(; t && t->code != ASS_OP_T; t = (Token*)s_pop(stack)) ;
-	return type;
-}
-*/
 
 /*
 *	<program>			-> PLATYPUS { <opt statements> }
@@ -271,30 +280,42 @@ void statement(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 void assignment_statement(void) {
-	/*char exp_type;*/
-	Token rval, lval = lookahead;
-	stack = s_create(4, 0, sizeof(Token), 'f');
-	semsys = 1;
+	Token literal;
+	lval = lookahead;
+	assign_asys = 1;
+	assign_stack = s_create(4, 0, sizeof(Token), 'f');
 
 	assignment_expression(); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: Assignment statement parsed");
 
-	if ((rval = *((Token*)s_pop(stack))).code == EOS_T) {
-		rval = *((Token*)s_pop(stack));
-		switch (st_get_type(sym_table, lval.attribute.vid_offset)) {
-		case 'I':
-			if (rval.code == FPL_T) st_update_type(sym_table, lval.attribute.vid_offset, 'F');
-			break;
-		case 'F':
-			if (rval.code == INL_T) st_update_type(sym_table, lval.attribute.vid_offset, 'I');
-			break;
+	/* if assignment only involves one literal then update type */
+	if ((*((Token*)s_pop(assign_stack))).code == EOS_T) {
+		char type;
+		literal = *((Token*)s_pop(assign_stack));
+		#ifdef DEBUG
+		printf("lval(%d) = literal(%d);\n", lval.code, literal.code);
+		#endif
+		type = st_get_type(sym_table, lval.attribute.vid_offset);
+		#ifdef DEBUG
+		printf("type of lval = %c;\n", type);
+		#endif
+		if (type == 'I' && literal.code == FPL_T || type == 'F' && literal.code == INL_T) {
+			st_update_type(sym_table, lval.attribute.vid_offset, literal.code == INL_T ? 'I' : 'F');
+			#ifdef DEBUG
+			printf("After st_update_type: type of lval = %c;\n", st_get_type(sym_table, lval.attribute.vid_offset));
+			#endif
 		}
 	}
-	/*exp_type = get_exp_type();
-	if (exp_type != st_get_type(sym_table, t.attribute.vid_offset))
-		st_update_type(sym_table, t.attribute.vid_offset, exp_type);*/
-	s_destroy(stack);
-	semsys = 0;
+	s_destroy(assign_stack);
+
+	if (str_exp_asys) {
+		int vid_offset = st_update_value(sym_table, lval.attribute.vid_offset, rval);
+		#ifdef DEBUG
+		printf("Updated value for SVID: %s\n", b_setmark(str_LTBL , sym_table.pstvr[vid_offset].i_value.str_offset));
+		#endif
+		str_exp_asys = 0;
+	}
+	assign_asys = 0;
 }
 /*
 *	<assignment expression>			-> AVID = <arithmetic expression> |  SVID = <string expression>
@@ -303,11 +324,26 @@ void assignment_statement(void) {
 */
 void assignment_expression(void) {
 	if (lookahead.code == AVID_T) {
+		ar_exp_asys = 1;
+		operands = s_create(2, 0, sizeof(Token), 'f');
+		operators = s_create(1, 0, sizeof(Token), 'f');
 		match(AVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); arithmetic_expression();
 		gen_incode("PLATY: Assignment expression (arithmetic) parsed");
+		s_destroy(operators);
+		s_destroy(operands);
+		ar_exp_asys = 0;
 	} else if (lookahead.code == SVID_T) {
-		match(SVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); string_expression();
+		char c;
+		match(SVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR);
+		/* start rvalue evaluation process after matching assignment operator */
+		str_exp_asys = 1; string_expression();
 		gen_incode("PLATY: Assignment expression (string) parsed");
+		/* set InitialValue */
+		rval.str_offset = b_size(str_LTBL);
+		for (c = b_getc(str_eval); !b_eob(str_eval) && b_addc(str_LTBL, c); c = b_getc(str_eval)) ;
+		b_addc(str_LTBL, '\0');
+		b_reset(str_eval);
+		/*str_exp_asys = 0;*/
 	} else {
 		syn_printe();
 	}
@@ -403,7 +439,7 @@ void output_list(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 void arithmetic_expression(void) {
-	if (lookahead.code == ART_OP_T && (lookahead.attribute.rel_op == PLUS || lookahead.attribute.rel_op == MINUS)) unary_arithmetic_expression();
+	if (lookahead.code == ART_OP_T && (lookahead.attribute.arr_op == PLUS || lookahead.attribute.arr_op == MINUS)) unary_arithmetic_expression();
 	else if (lookahead.code == AVID_T || lookahead.code == FPL_T || lookahead.code == INL_T || lookahead.code == LPR_T) additive_arithmetic_expression();
 	else { syn_printe(); return; }
 	gen_incode("PLATY: Arithmetic expression parsed");
