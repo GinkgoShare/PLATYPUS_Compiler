@@ -25,22 +25,22 @@ static Token lval;
 static InitialValue rval;
 static Stack* assign_stack;
 static Stack* operators;
-static Stack* expression;
-static List* arth_eval;
-static Buffer* str_eval;
+static Stack* exp_stck;
+static List* rpn_exp;
 
 int synerrno;
-int assign_asys, ar_exp_asys, str_exp_asys;
+int assign_asys, exp_asys;
 
+/* static function declarations */
 static void eval_rpn(void);
+static int concat_str(Token* op1, Token* op2);
 
 /*
 Author: Sv.Ranev
 */
 void parser(Buffer * in_buf) {
 	sc_buf = in_buf;
-	str_eval = b_create(10, 10, 'a');
-	assign_asys = ar_exp_asys = str_exp_asys = 0;
+	assign_asys = exp_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	program(); match(SEOF_T, NO_ATTR);
 	gen_incode("PLATY: Source file parsed");
@@ -68,19 +68,19 @@ void match(int pr_token_code, int pr_token_attribute) {
 			syn_eh(pr_token_code); return;
 		case ART_OP_T:
 			if (lookahead.attribute.arr_op == pr_token_attribute) {
-				if (ar_exp_asys) {
+				if (exp_asys) {
 					while (!s_isempty(operators)) {
 						Token* tkn = (Token*)s_pop(operators);
 						/* MULT and DIV have highest order of precedence(oop) so if top of stack is 
-						already at highest oop then add popped token to arth_eval list */
-						if (tkn->attribute.arr_op == MULT || tkn->attribute.arr_op == DIV) l_add(arth_eval, tkn);
+						already at highest oop then add popped token to rpn_exp list */
+						if (tkn->attribute.arr_op == MULT || tkn->attribute.arr_op == DIV) l_add(rpn_exp, tkn);
 						/* ASS_OP_T and LPR_T are lowest oop and if the lookahead token attribute is 
 						MULT or DIV then it is higher oop so continue to push to stack */
 						else if (tkn->code == ASS_OP_T || tkn->code == LPR_T 
 							|| lookahead.attribute.arr_op == MULT || lookahead.attribute.arr_op == DIV) {
 							s_push(operators, tkn);
 							break;
-						} else l_add(arth_eval, tkn);
+						} else l_add(rpn_exp, tkn);
 					}
 					s_push(operators, &lookahead);
 				}
@@ -88,40 +88,38 @@ void match(int pr_token_code, int pr_token_attribute) {
 			}
 			syn_eh(pr_token_code); return;
 		case LPR_T:
-			if (ar_exp_asys) s_push(operators, &lookahead);
+			if (exp_asys) s_push(operators, &lookahead);
 			break;
 		case RPR_T:
-			if (ar_exp_asys) {
+			if (exp_asys) {
 				Token* tkn;
 				for (tkn = (Token*)s_pop(operators); tkn->code != LPR_T; tkn = (Token*)s_pop(operators))
-					l_add(arth_eval, tkn);
+					l_add(rpn_exp, tkn);
 			}
 			break;
 		case REL_OP_T:
 			if (lookahead.attribute.rel_op == pr_token_attribute) break;
 			syn_eh(pr_token_code); return;
 		case SVID_T: case STR_T:
-			/* add strings to dynamic buffer in order of appearance which represents concatenation */
-			if (str_exp_asys) {
-				int i, mark; char* str;
-				mark = lookahead.code == SVID_T ? 
-					st_get_record(sym_table, lookahead.attribute.vid_offset).i_value.str_offset : 
-					lookahead.attribute.str_offset;
-				if (mark >= 0) {
-					str = b_setmark(str_LTBL, mark);
-					for (i=0; str[i]; ++i) b_addc(str_eval, str[i]);
+			if (exp_asys) l_add(rpn_exp, &lookahead);
+			break;
+		case SCC_OP_T:
+			if (exp_asys) {
+				while (!s_isempty(operators)) {
+					Token* tkn = (Token*)s_pop(operators);
+					if (tkn->code == SCC_OP_T) l_add(rpn_exp, tkn);
+					else { s_push(operators, tkn); break; }
 				}
+				s_push(operators, &lookahead);
 			}
 			break;
 		case AVID_T: case INL_T: case FPL_T:
-			if (ar_exp_asys) l_add(arth_eval, &lookahead);
+			if (exp_asys) l_add(rpn_exp, &lookahead);
 			break;
 		case ASS_OP_T:
-			if (ar_exp_asys) {
-				/* this grammar cannot have nested assignments so it is safe to 
-				assume we can push to the stack without a condition */
-				s_push(operators, &lookahead);
-			}
+			/* this grammar cannot have nested assignments so it is safe to 
+			assume we can push to the stack without a condition */
+			if (exp_asys) s_push(operators, &lookahead);
 			break;
 		}
 		if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
@@ -311,9 +309,10 @@ void assignment_statement(void) {
 	Token literal;
 	lval = lookahead;
 	assign_asys = 1;
-	assign_stack = s_create(4, 0, sizeof(Token), 'f');
 
+	rpn_exp = l_create(10, 10, sizeof(Token));
 	operators = s_create(4, 4, sizeof(Token), 'a');
+	assign_stack = s_create(4, 0, sizeof(Token), 'f');
 
 	assignment_expression(); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: Assignment statement parsed");
@@ -337,16 +336,19 @@ void assignment_statement(void) {
 		}
 	}
 
+	/* evaluate RPN */
+	#ifdef DEBUG
+	printf("Before eval_rpn\n");
+	#endif
+	eval_rpn();
+	#ifdef DEBUG
+	printf("After eval_rpn\n");
+	#endif
+
 	s_destroy(assign_stack);
 	s_destroy(operators);
+	l_destroy(rpn_exp);
 
-	if (str_exp_asys) {
-		int vid_offset = st_update_value(sym_table, lval.attribute.vid_offset, rval);
-		#ifdef DEBUG
-		printf("Updated value for SVID: %s\n", b_setmark(str_LTBL , sym_table.pstvr[vid_offset].i_value.str_offset));
-		#endif
-		str_exp_asys = 0;
-	}
 	assign_asys = 0;
 }
 /*
@@ -355,38 +357,17 @@ void assignment_statement(void) {
 *   Authors: Christopher Elliott, 040 570 022
 */
 void assignment_expression(void) {
+	exp_asys = 1;
 	if (lookahead.code == AVID_T) {
-		ar_exp_asys = 1;
-		arth_eval = l_create(10, 10, sizeof(Token));
-
 		match(AVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); arithmetic_expression();
-		gen_incode("PLATY: Assignment expression (arithmetic) parsed");
-
-		/* evaluate RPN */
-		#ifdef DEBUG
-		printf("Before eval_rpn\n");
-		#endif
-		eval_rpn();
-		#ifdef DEBUG
-		printf("After eval_rpn\n");
-		#endif
-		
-		l_destroy(arth_eval);
-		ar_exp_asys = 0;
+		gen_incode("PLATY: Assignment expression (arithmetic) parsed");		
 	} else if (lookahead.code == SVID_T) {
-		char c;
-		match(SVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR);
-		str_exp_asys = 1; string_expression();
+		match(SVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); string_expression();
 		gen_incode("PLATY: Assignment expression (string) parsed");
-		/* set InitialValue */
-		rval.str_offset = b_size(str_LTBL);
-		for (c = b_getc(str_eval); !b_eob(str_eval) && b_addc(str_LTBL, c); c = b_getc(str_eval)) ;
-		b_addc(str_LTBL, '\0');
-		b_reset(str_eval);
-		/*str_exp_asys = 0;*/
 	} else {
 		syn_printe();
 	}
+	exp_asys = 0;
 }
 /*
 *	<selection statement>			-> IF ( <conditional expression> ) THEN <opt statments>
@@ -735,16 +716,21 @@ void primary_s_relational_expression_p(void) {
 }
 
 static void eval_rpn(void) {
-	int i;
+	int i, sz;
 	Token new_tkn, *tkn, *op1, *op2;
-	expression = s_create(l_size(arth_eval), 4, sizeof(Token), 'a');
-	while (!s_isempty(operators)) l_add(arth_eval, s_pop(operators)); /* empty remaining operators on stack to expression list */
-	for (i = 0; i < l_size(arth_eval); ++i) {
-		tkn = (Token*)l_get(arth_eval, i);
+	/* empty remaining operators on stack to expression list */
+	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
+	sz = l_size(rpn_exp);
+	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
+	#ifdef DEBUG
+	printf("Expression token size is %d;\n", sz);
+	#endif
+	for (i = 0; i < sz; ++i) {
+		tkn = (Token*)l_get(rpn_exp, i);
 		switch (tkn->code) {
 			case ART_OP_T:
-				op2 = (Token*)s_pop(expression);
-				op1 = (Token*)s_pop(expression);
+				op2 = (Token*)s_pop(exp_stck);
+				op1 = (Token*)s_pop(exp_stck);
 				switch (tkn->attribute.arr_op) {
 					case PLUS:
 						#ifdef DEBUG
@@ -799,13 +785,13 @@ static void eval_rpn(void) {
 						}
 						break;
 				}
-				s_push(expression, &new_tkn);
+				s_push(exp_stck, &new_tkn);
 				break;
 			case AVID_T:
 				#ifdef DEBUG
 				printf("In AVID_T block;\n");
 				#endif
-				if (s_isempty(expression)) { s_push(expression, tkn); break; }
+				if (s_isempty(exp_stck)) { s_push(exp_stck, tkn); break; } /* first VID token so keep is lval */
 				switch (st_get_type(sym_table, tkn->attribute.vid_offset)) {
 					case 'I':
 						new_tkn.code = INL_T;
@@ -816,20 +802,17 @@ static void eval_rpn(void) {
 						new_tkn.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
 						break;
 				}
-				s_push(expression, &new_tkn); 
+				s_push(exp_stck, &new_tkn);
 				break;
 			case INL_T: case FPL_T:
-				#ifdef DEBUG
-				printf("In INL_T and FPL_T block;\n");
-				#endif
-				s_push(expression, tkn); 
+				s_push(exp_stck, tkn); 
 				break;
 			case ASS_OP_T:
 				#ifdef DEBUG
 				printf("In ASS_OP_T block;\n");
 				#endif
-				op2 = (Token*)s_pop(expression);
-				op1 = (Token*)s_pop(expression);
+				op2 = (Token*)s_pop(exp_stck);
+				op1 = (Token*)s_pop(exp_stck);
 				switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
 					case 'I':
 						rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
@@ -837,11 +820,51 @@ static void eval_rpn(void) {
 					case 'F':
 						rval.fpl_val = (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
 						break;
-				}
+					case 'S':
+						rval.str_offset = op2->attribute.str_offset;
+						break;
+				}		
 				st_update_value(sym_table, op1->attribute.vid_offset, rval);
+				break;
+			case SVID_T: case STR_T:
+				s_push(exp_stck, tkn);
+				break;
+			case SCC_OP_T:
+				#ifdef DEBUG
+				printf("In SCC_OP_T block;\n");
+				#endif
+				op2 = (Token*)s_pop(exp_stck);
+				op1 = (Token*)s_pop(exp_stck);
+				new_tkn.code = STR_T;
+				new_tkn.attribute.str_offset = concat_str(op1, op2);
+				s_push(exp_stck, &new_tkn); 
+				#ifdef DEBUG
+				printf("String offset: %d\n", new_tkn.attribute.str_offset);
+				#endif
 				break;
 		}
 	}
-	s_destroy(expression);
+	s_destroy(exp_stck);
 }
 
+static int concat_str(Token* op1, Token* op2) {
+	char* str;
+	int i, mark, str_offset;
+	str_offset = b_size(str_LTBL);
+	mark = (op1->code == SVID_T ? 
+				st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : 
+				op1->attribute.str_offset);
+	if (mark >= 0) {
+		str = b_setmark(str_LTBL, mark);
+		for (i = 0; str[i]; ++i) b_addc(str_LTBL, str[i]);
+	}
+	mark = (op2->code == SVID_T ? 
+				st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : 
+				op2->attribute.str_offset);
+	if (mark >= 0) {
+		str = b_setmark(str_LTBL, mark);
+		for (i=0; str[i]; ++i) b_addc(str_LTBL, str[i]);
+	}
+	b_addc(str_LTBL, '\0');
+	return str_offset;
+}

@@ -165,6 +165,7 @@ int st_update_value(STD sym_table, int vid_offset, InitialValue i_value) {
 	printf("Before update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
 	printf("Before update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
 	printf("Before update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
+	printf("VID offset is %d\n", vid_offset);
 	#endif
 	sym_table.pstvr[vid_offset].i_value = i_value;
 	#ifdef DEBUG
@@ -184,10 +185,17 @@ Parameters: STD sym_table, int vid_offset
 Return value: F for floating point, I for integer, or S for string, or -1 if fail
 *******************************************************************************/
 char st_get_type(STD sym_table, int vid_offset) {
-	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;
-	else if ((int)(sym_table.pstvr[vid_offset].status_field & ITYPE) == ITYPE) return 'I';
-	else if ((int)(sym_table.pstvr[vid_offset].status_field & FTYPE) == FTYPE) return 'F';
-	else return 'S';
+	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;	
+	switch (sym_table.pstvr[vid_offset].status_field & STYPE) {
+		case STYPE:
+			return 'S';
+		case FTYPE:
+			return 'F';
+		case ITYPE:
+			return 'I';
+		default:
+			return R_FAIL_1;
+	}
 }
 
 /*******************************************************************************
