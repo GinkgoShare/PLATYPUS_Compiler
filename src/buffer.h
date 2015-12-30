@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: buffer.h
-Compiler: MS Visual Studio 2013
+Compiler: Borland 5.5
 Author: Christopher Elliott, 040 570 022
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 1
@@ -75,7 +75,7 @@ int b_load(FILE * const fi, Buffer * const pBD);
 int b_isempty(Buffer * const pBD);
 int b_eob(Buffer * const pBD);
 char b_getc(Buffer * const pBD);
-int b_print(Buffer  * const pBD);
+int b_print(Buffer * const pBD);
 Buffer *b_pack(Buffer * const pBD);
 char b_rflag(Buffer * const pBD);
 short b_retract(Buffer * const pBD);

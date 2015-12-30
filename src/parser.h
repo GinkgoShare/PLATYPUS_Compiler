@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: parser.h
-Compiler: MS Visual Studio 2012
+Compiler: Borland 5.5
 Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 4

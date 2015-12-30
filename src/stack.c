@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: stack.c
-Compiler: MS Visual Studio 2012
+Compiler: Borland 5.5
 Author: Christopher Elliott, 040 570 022
 Course: CST 8152 - Compilers, Lab Section : 012
 Date: 06/12/2015 (DD/MM/YYYY)
@@ -66,9 +66,8 @@ Algorithm: check if stack is at capacity and allocate more space if necessary,
 *******************************************************************************/
 pStack s_push(pStack const pStck, const void* elmnt) {
 	void* pLoc; 
-	void *destAddr;
+	void *dest_addr;
 	short new_capacity;
-	Token* t = ((Token*)elmnt);
 	if (!pStck && pStck->capacity == USHRT_MAX) return NULL;
 
 	if((pStck->elmnt_offset * pStck->elmnt_sz) == pStck->capacity) {
@@ -81,8 +80,8 @@ pStack s_push(pStack const pStck, const void* elmnt) {
 		pStck->elmnts = pLoc;
 	}
 
-	destAddr = (char *)pStck->elmnts + (pStck->elmnt_offset * pStck->elmnt_sz);
-	destAddr = (Token*)memcpy(destAddr, elmnt, pStck->elmnt_sz);
+	dest_addr = (char *)pStck->elmnts + (pStck->elmnt_offset * pStck->elmnt_sz);
+	dest_addr = (char*)memcpy(dest_addr, elmnt, pStck->elmnt_sz);
 	pStck->elmnt_offset++;
 	return pStck;
 }

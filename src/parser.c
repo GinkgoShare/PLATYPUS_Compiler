@@ -1,6 +1,6 @@
 /*******************************************************************************
 File name: parser.c
-Compiler: MS Visual Studio 2012
+Compiler: Borland 5.5
 Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 Course: CST 8152 - Compilers, Lab Section : 012
 Assignment: 4
@@ -29,7 +29,9 @@ static Token lookahead;
 
 static Stack* assign_stack;
 static Stack* operators;
-static Stack* operands;
+static Stack* expression;
+
+static Buffer* art_eval;
 static Buffer* str_eval;
 
 int synerrno;
@@ -40,6 +42,7 @@ Author: Sv.Ranev
 */
 void parser(Buffer * in_buf) {
 	sc_buf = in_buf;
+	art_eval = b_create(10, 10, 'a');
 	str_eval = b_create(10, 10, 'a');
 	assign_asys = ar_exp_asys = str_exp_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
@@ -69,7 +72,7 @@ void match(int pr_token_code, int pr_token_attribute) {
 			syn_eh(pr_token_code); return;
 		case ART_OP_T:
 			if (lookahead.attribute.arr_op == pr_token_attribute) {
-				if (ar_exp_asys) s_push(operands, &lookahead);
+				if (ar_exp_asys) s_push(operators, &lookahead);
 				break;
 			}
 			syn_eh(pr_token_code); return;
@@ -83,19 +86,16 @@ void match(int pr_token_code, int pr_token_attribute) {
 				mark = lookahead.code == SVID_T ? 
 					st_get_value(sym_table, lookahead.attribute.vid_offset)->i_value.str_offset : 
 					lookahead.attribute.str_offset;
-				#ifdef DEBUG
-				printf("mark = %d;\n", mark);
-				#endif
-				if (mark >= 0) { 
+				if (mark >= 0) {
 					str = b_setmark(str_LTBL, mark);
 					for (i=0; str[i]; ++i) b_addc(str_eval, str[i]);
 				}
 			}
 			break;
 		case AVID_T: case INL_T: case FPL_T:
-			if (ar_exp_asys)
-				if (pr_token_code == AVID_T || pr_token_code == INL_T || pr_token_code == FPL_T)
-					s_push(operands, &lookahead);
+			if (ar_exp_asys) {
+				s_push(expression, &lookahead);
+			}
 			break;
 		}
 		if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
@@ -327,12 +327,12 @@ void assignment_statement(void) {
 void assignment_expression(void) {
 	if (lookahead.code == AVID_T) {
 		ar_exp_asys = 1;
-		operands = s_create(2, 0, sizeof(Token), 'f');
+		expression = s_create(2, 0, sizeof(Token), 'f');
 		operators = s_create(1, 0, sizeof(Token), 'f');
 		match(AVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); arithmetic_expression();
 		gen_incode("PLATY: Assignment expression (arithmetic) parsed");
 		s_destroy(operators);
-		s_destroy(operands);
+		s_destroy(expression);
 		ar_exp_asys = 0;
 	} else if (lookahead.code == SVID_T) {
 		char c;
