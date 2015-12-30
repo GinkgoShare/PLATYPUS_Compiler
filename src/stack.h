@@ -20,6 +20,7 @@ Function list: [
 
 #define FIXED 0
 #define ADDITIVE 1
+#define R_FAIL_1 -1
 
 typedef struct StackDescriptor {
 	void* elmnts;
@@ -31,10 +32,10 @@ typedef struct StackDescriptor {
 } Stack, *pStack;
 
 Stack * s_create(short init_capacity, short inc_factor, short elmnt_sz, char mode);
-pStack s_push(pStack const pStck, const void* elmnt);
-void* s_pop(pStack const pStck);
-int s_isempty(Stack * const pStck);
-int s_reset(Stack * const pStck);
-void s_destroy(Stack * const pStck);
+pStack s_push(pStack const pSD, const void* elmnt);
+void* s_pop(pStack const pSD);
+int s_isempty(Stack * const pSD);
+int s_reset(Stack * const pSD);
+void s_destroy(Stack * const pSD);
 
 #endif

@@ -38,6 +38,7 @@ int l_remove(List* const pLD, const int index);
 int l_size(List* const pLD);
 int l_isEmpty(List* const pLD);
 void* l_pack(List* const pLD);
+int l_reset(List* const pLD);
 void l_destroy(List* const pLD);
 
 #endif

@@ -16,6 +16,7 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #include "token.h"
 #include "stable.h"
 #include "stack.h"
+#include "list.h"
 
 #define NO_ATTR -1
 

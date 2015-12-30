@@ -162,11 +162,15 @@ Return value: int vid_offset or -1 if fail
 int st_update_value(STD sym_table, int vid_offset, InitialValue i_value) {
 	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;
 	#ifdef DEBUG
-	printf("Before update value = %d;\n", sym_table.pstvr[vid_offset].i_value);
+	printf("Before update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
+	printf("Before update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
+	printf("Before update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
 	#endif
 	sym_table.pstvr[vid_offset].i_value = i_value;
 	#ifdef DEBUG
-	printf("After update value = %d;\n", sym_table.pstvr[vid_offset].i_value);
+	printf("After update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
+	printf("After update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
+	printf("After update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
 	#endif
 	return vid_offset;
 }
@@ -381,6 +385,6 @@ History/Versions: 1.0 / 28 December 2015
 Parameters: STD sym_table, int vid_offset
 Return value: STVR*
 *******************************************************************************/
-STVR* st_get_value(STD sym_table, int vid_offset) {
-	return sym_table.pstvr + vid_offset;
+STVR st_get_record(STD sym_table, int vid_offset) {
+	return sym_table.pstvr[vid_offset];
 }
