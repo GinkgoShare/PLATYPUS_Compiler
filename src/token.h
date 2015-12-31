@@ -68,7 +68,7 @@ typedef union TokenAttribute{
 
 typedef struct Token
 {
-	int code;                 /* token code */
+	int code;     /* token code */
 	TA attribute; /* token attribute */
 } Token;
 
