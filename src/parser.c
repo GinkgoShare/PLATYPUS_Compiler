@@ -63,21 +63,25 @@ void match(int pr_token_code, int pr_token_attribute) {
 			case KW_T:
 				if (lookahead.attribute.kwt_idx == pr_token_attribute) break;
 				syn_eh(pr_token_code); return;
-			case LOG_OP_T:
-				if (lookahead.attribute.log_op == pr_token_attribute) {
+			case LOG_OP_T: case REL_OP_T:
+				if (pr_token_code == LOG_OP_T && lookahead.attribute.log_op == pr_token_attribute 
+					|| pr_token_code == REL_OP_T && lookahead.attribute.rel_op == pr_token_attribute) {
 					if (exp_asys) {
 						while (!s_isempty(operators)) {
 							Token* tkn = (Token*)s_pop(operators);
-							if (lookahead.attribute.log_op == AND && tkn->code == LOG_OP_T && tkn->attribute.log_op == OR) {
+							if (tkn->code == REL_OP_T || lookahead.code == LOG_OP_T 
+							&& (tkn->attribute.log_op == AND || lookahead.attribute.log_op == OR)) l_add(rpn_exp, tkn);
+							else {
 								s_push(operators, tkn);
 								break;
-							} else l_add(rpn_exp, tkn);
+							}
 						}
 						s_push(operators, &lookahead);
 					}
 					break;
 				}
-				syn_eh(pr_token_code); return;
+				syn_eh(pr_token_code);
+				return;
 			case ART_OP_T:
 				if (lookahead.attribute.arr_op == pr_token_attribute) {
 					if (exp_asys) {
@@ -108,35 +112,14 @@ void match(int pr_token_code, int pr_token_attribute) {
 					}
 					break;
 				}
-				syn_eh(pr_token_code); return;
-			case LPR_T:
-				if (exp_asys) s_push(operators, &lookahead);
-				break;
-			case RPR_T:
+				syn_eh(pr_token_code);
+				return;
+			case RPR_T: /* add operators to the rpn_exp until we reach the previous left parenthesis */
 				if (exp_asys) {
 					Token* tkn;
 					for (tkn = (Token*)s_pop(operators); tkn->code != LPR_T; tkn = (Token*)s_pop(operators))
 						l_add(rpn_exp, tkn);
 				}
-				break;
-			case REL_OP_T:
-				if (lookahead.attribute.rel_op == pr_token_attribute) {
-					if (exp_asys) {
-						while (!s_isempty(operators)) {
-							Token* tkn = (Token*)s_pop(operators);
-							if (tkn->code == REL_OP_T) l_add(rpn_exp, tkn);
-							else {
-								s_push(operators, tkn);
-								break;
-							}
-						}
-						s_push(operators, &lookahead);
-					}
-					break;
-				}
-				syn_eh(pr_token_code); return;
-			case SVID_T: case STR_T:
-				if (exp_asys) l_add(rpn_exp, &lookahead);
 				break;
 			case SCC_OP_T:
 				if (exp_asys) {
@@ -151,10 +134,10 @@ void match(int pr_token_code, int pr_token_attribute) {
 					s_push(operators, &lookahead);
 				}
 				break;
-			case AVID_T: case INL_T: case FPL_T:
+			case AVID_T: case INL_T: case FPL_T: case SVID_T: case STR_T:
 				if (exp_asys) l_add(rpn_exp, &lookahead);
 				break;
-			case ASS_OP_T:
+			case ASS_OP_T: case LPR_T:
 				/* this grammar cannot have nested assignments so it is safe to 
 				assume we can push to the stack without meeting a condition */
 				if (exp_asys) s_push(operators, &lookahead);
