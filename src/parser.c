@@ -740,8 +740,8 @@ Algorithm: unload the remaining operators off the stack, create a new stack for
 *******************************************************************************/
 static void eval_rpn(void) {
 
+	Token *tkn;
 	int i, sz, err;
-	Token new_tkn, *tkn, *op1, *op2;
 
 	/* empty remaining operators on stack to expression list */
 	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
@@ -749,25 +749,61 @@ static void eval_rpn(void) {
 	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
 
 	for (i = 0, err = 0; i < sz && !err; ++i) {
+
+		Token new_tkn;
 		tkn = (Token*)l_get(rpn_exp, i);
-		switch (tkn->code) {
-			char type;
-			case INL_T: case FPL_T: case SVID_T: case STR_T:
-				s_push(exp_stck, tkn); 
-				break;
-			case AVID_T:
-				/* keep first AVID token as lval of expression */
-				if (s_isempty(exp_stck)) { s_push(exp_stck, tkn); break; }
-				/* change to literal type for easier processesing */
-				type = st_get_type(sym_table, tkn->attribute.vid_offset);
+
+		if (tkn->code > 1 && tkn->code < 7) { /* tokens that hold values are in this range */
+			if (tkn->code > 2 || s_isempty(exp_stck)) s_push(exp_stck, tkn);
+			else {
+				/* change to literal type for easier evaluations */
+				char type = st_get_type(sym_table, tkn->attribute.vid_offset);
 				new_tkn.code = (type == 'I' ? INL_T : FPL_T);
 				if (type == 'I') new_tkn.attribute.int_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.int_val;
 				else new_tkn.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
 				s_push(exp_stck, &new_tkn);
+			}
+		} else { /* token is an operator */
+			Token *op1, *op2;
+			op2 = (Token*)s_pop(exp_stck);
+			op1 = (Token*)s_pop(exp_stck);
+			switch (tkn->code) {
+			case SCC_OP_T:
+				#ifdef DEBUG
+					printf("In SCC_OP_T\n");
+				#endif
+				new_tkn.code = STR_T;
+				new_tkn.attribute.str_offset = concat_str(op1, op2);
+				s_push(exp_stck, &new_tkn);
+				break;
+			case ASS_OP_T:
+				#ifdef DEBUG
+					printf("In ASS_OP_T\n");
+				#endif
+				/* if assignment statement only involves one literal then update type */
+				if (assign_asys && sz == 3) {
+					char type = st_get_type(sym_table, op1->attribute.vid_offset);
+					if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
+						st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+					}
+				}
+				switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
+					case 'I':
+						rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
+						break;
+					case 'F':
+						rval.fpl_val = (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
+						break;
+					case 'S':
+						rval.str_offset = op2->attribute.str_offset;
+						break;
+				}		
+				st_update_value(sym_table, op1->attribute.vid_offset, rval);
 				break;
 			case ART_OP_T:
-				op2 = (Token*)s_pop(exp_stck);
-				op1 = (Token*)s_pop(exp_stck);
+				#ifdef DEBUG
+					printf("In ART_OP_T\n");
+				#endif
 				if (tkn->attribute.arr_op == DIV && !op2->attribute.int_value) {
 					printf("Cannot divide by zero.\n");
 					err = 1;
@@ -791,25 +827,10 @@ static void eval_rpn(void) {
 				}
 				s_push(exp_stck, &new_tkn);
 				break;
-			case SCC_OP_T:
-				op2 = (Token*)s_pop(exp_stck);
-				op1 = (Token*)s_pop(exp_stck);
-				new_tkn.code = STR_T;
-				new_tkn.attribute.str_offset = concat_str(op1, op2);
-				s_push(exp_stck, &new_tkn);
-				break;
-			case LOG_OP_T:
-				op2 = (Token*)s_pop(exp_stck);
-				op1 = (Token*)s_pop(exp_stck);
-				new_tkn.code = INL_T;
-				if (tkn->attribute.log_op == AND)
-					new_tkn.attribute.int_value = !(op1->attribute.int_value) ? op1->attribute.int_value : op2->attribute.int_value;
-				else 
-					new_tkn.attribute.int_value =   op1->attribute.int_value  ? op1->attribute.int_value : op2->attribute.int_value;
-				break;
 			case REL_OP_T:
-				op2 = (Token*)s_pop(exp_stck);
-				op1 = (Token*)s_pop(exp_stck);
+				#ifdef DEBUG
+					printf("In REL_OP_T\n");
+				#endif
 				new_tkn.code = INL_T;
 				switch (tkn->attribute.rel_op) {
 					case EQ:
@@ -847,40 +868,21 @@ static void eval_rpn(void) {
 				}
 				s_push(exp_stck, &new_tkn);
 				break;
-			case ASS_OP_T:
-				op2 = (Token*)s_pop(exp_stck);
-				op1 = (Token*)s_pop(exp_stck);
-				/* if assignment statement only involves one literal then update type */
-				if (assign_asys && sz == 3) {
-					#ifdef DEBUG
-					if (op1->code == 2)
-						printf("Expression: %s = %s;\n", "AVID_T", (op2->code == 4 ? "FPL_T" : "INL_T"));
-					#endif
-					type = st_get_type(sym_table, op1->attribute.vid_offset);
-					#ifdef DEBUG
-					printf("type of lval = %s; %c\n", type == 'F' ? "float" : "int", type);
-					#endif
-					if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
-						st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
-						#ifdef DEBUG
-						printf("After st_update_type type of lval = %c;\n", st_get_type(sym_table, op1->attribute.vid_offset));
-						#endif
-					}
-				}
-				switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
-					case 'I':
-						rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
-						break;
-					case 'F':
-						rval.fpl_val = (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-						break;
-					case 'S':
-						rval.str_offset = op2->attribute.str_offset;
-						break;
-				}		
-				st_update_value(sym_table, op1->attribute.vid_offset, rval);
+			case LOG_OP_T:
+				#ifdef DEBUG
+					printf("In LOG_OP_T\n");
+					printf("Tkn->attribute.log_op is %d.\n", tkn->attribute.log_op);
+					printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d.\n", tkn->attribute.log_op, op1->attribute.int_value, op2->attribute.int_value);
+				#endif
+				new_tkn.code = INL_T;
+				if (tkn->attribute.log_op == AND)
+					new_tkn.attribute.int_value = (op1->attribute.int_value ? op2->attribute.int_value : op1->attribute.int_value);
+				else 
+					new_tkn.attribute.int_value = (op1->attribute.int_value ? op1->attribute.int_value : op2->attribute.int_value);
+				s_push(exp_stck, &new_tkn);
 				break;
-		}
+			}
+		}	
 	}
 	#ifdef DEBUG
 	if (!s_isempty(exp_stck)) {

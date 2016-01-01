@@ -23,6 +23,8 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 
 extern STD sym_table; /* global sym_table variable */
 
+static void st_setsize(void);
+static void st_incoffset(void);
 static int cmp_asc(const void *a, const void *b);
 static int cmp_dsc(const void *a, const void *b);
 static int buffer_sort(void);
@@ -391,7 +393,7 @@ Purpose: retrieves an entry within the symbol table
 Author: Christopher Elliott, 040 570 022
 History/Versions: 1.0 / 28 December 2015
 Parameters: STD sym_table, int vid_offset
-Return value: STVR*
+Return value: STVR evaluated from the vid_offset parameter
 *******************************************************************************/
 STVR st_get_record(STD sym_table, int vid_offset) {
 	return sym_table.pstvr[vid_offset];
