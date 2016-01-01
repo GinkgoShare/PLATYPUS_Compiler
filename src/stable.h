@@ -20,7 +20,7 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #define DEFAULT 0xFFF8		/* 1111 1111 1111 1000 */
 #define ITYPE 0x0004		/* 0000 0000 0000 0100 */
 #define FTYPE 0x0002		/* 0000 0000 0000 0010 */
-#define STYPE 0x0007		/* 0000 0000 0000 0111 */
+#define STYPE 0x0006		/* 0000 0000 0000 0110 */
 #define XOR_MASK 0x0007		/* 0000 0000 0000 0111 */
 
 #define NVLD_SZ 0			/* invalid size of a symbol table descriptor */

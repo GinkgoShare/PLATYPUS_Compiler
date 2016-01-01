@@ -185,7 +185,7 @@ Parameters: STD sym_table, int vid_offset
 Return value: F for floating point, I for integer, or S for string, or -1 if fail
 *******************************************************************************/
 char st_get_type(STD sym_table, int vid_offset) {
-	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;	
+	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;
 	switch (sym_table.pstvr[vid_offset].status_field & STYPE) {
 		case STYPE:
 			return 'S';

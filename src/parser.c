@@ -21,15 +21,13 @@ extern Token mlwpar_next_token(Buffer * sc_buf);
 
 static Buffer* sc_buf;
 static Token lookahead;
-static Token lval;
 static InitialValue rval;
-static Stack* assign_stack;
 static Stack* operators;
 static Stack* exp_stck;
 static List* rpn_exp;
 
 int synerrno;
-int assign_asys, exp_asys, unry_asys;
+int assign_asys = 0, exp_asys = 0, unry_asys = 0;
 
 /* static function declarations */
 static void eval_rpn(void);
@@ -40,7 +38,6 @@ Author: Sv.Ranev
 */
 void parser(Buffer * in_buf) {
 	sc_buf = in_buf;
-	assign_asys = unry_asys = exp_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	program(); match(SEOF_T, NO_ATTR);
 	gen_incode("PLATY: Source file parsed");
@@ -57,8 +54,6 @@ Return value: void
 void match(int pr_token_code, int pr_token_attribute) {
 	if (lookahead.code == pr_token_code) {
 		if (lookahead.code == SEOF_T) return;
-		/* push until we reach stack capacity */
-		if (assign_asys && !s_push(assign_stack, &lookahead)) assign_asys = 0;
 		switch(pr_token_code) {
 			case KW_T:
 				if (lookahead.attribute.kwt_idx == pr_token_attribute) break;
@@ -126,9 +121,9 @@ void match(int pr_token_code, int pr_token_attribute) {
 					while (!s_isempty(operators)) {
 						Token* tkn = (Token*)s_pop(operators);
 						if (tkn->code == SCC_OP_T) l_add(rpn_exp, tkn);
-						else { 
-							s_push(operators, tkn); 
-							break; 
+						else {
+							s_push(operators, tkn);
+							break;
 						}
 					}
 					s_push(operators, &lookahead);
@@ -144,9 +139,9 @@ void match(int pr_token_code, int pr_token_attribute) {
 				break;
 		}
 		if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
-			syn_printe(); 
-			lookahead = mlwpar_next_token(sc_buf); 
-			++synerrno; 
+			syn_printe();
+			lookahead = mlwpar_next_token(sc_buf);
+			++synerrno;
 		}
 		return;
 	}
@@ -327,35 +322,9 @@ void statement(void) {
 *   Authors: Christopher Elliott, 040 570 022
 */
 void assignment_statement(void) {
-	Token literal;
-	lval = lookahead;
 	assign_asys = 1;
-
-	assign_stack = s_create(4, 0, sizeof(Token), 'f');
-
 	assignment_expression(); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: Assignment statement parsed");
-
-	/* if assignment only involves one literal then update type */
-	if ((*((Token*)s_pop(assign_stack))).code == EOS_T) {
-		char type;
-		literal = *((Token*)s_pop(assign_stack));
-		#ifdef DEBUG
-		printf("lval(%d) = literal(%d);\n", lval.code, literal.code);
-		#endif
-		type = st_get_type(sym_table, lval.attribute.vid_offset);
-		#ifdef DEBUG
-		printf("type of lval = %c;\n", type);
-		#endif
-		if (type == 'I' && literal.code == FPL_T || type == 'F' && literal.code == INL_T) {
-			st_update_type(sym_table, lval.attribute.vid_offset, literal.code == INL_T ? 'I' : 'F');
-			#ifdef DEBUG
-			printf("After st_update_type: type of lval = %c;\n", st_get_type(sym_table, lval.attribute.vid_offset));
-			#endif
-		}
-	}
-
-	s_destroy(assign_stack);
 	assign_asys = 0;
 }
 /*
@@ -770,133 +739,78 @@ Algorithm: unload the remaining operators off the stack, create a new stack for
 		   expression and push the value on the stack
 *******************************************************************************/
 static void eval_rpn(void) {
+
 	int i, sz, err;
 	Token new_tkn, *tkn, *op1, *op2;
+
 	/* empty remaining operators on stack to expression list */
 	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
 	sz = l_size(rpn_exp);
 	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
-	#ifdef DEBUG
-	printf("Expression token size is %d;\n", sz);
-	#endif
+
 	for (i = 0, err = 0; i < sz && !err; ++i) {
 		tkn = (Token*)l_get(rpn_exp, i);
 		switch (tkn->code) {
+			char type;
 			case INL_T: case FPL_T: case SVID_T: case STR_T:
 				s_push(exp_stck, tkn); 
 				break;
 			case AVID_T:
-				#ifdef DEBUG
-				printf("In AVID_T block;\n");
-				#endif
-				if (s_isempty(exp_stck)) { s_push(exp_stck, tkn); break; } /* first VID token so keep is lval */
-				switch (st_get_type(sym_table, tkn->attribute.vid_offset)) {
-					case 'I':
-						new_tkn.code = INL_T;
-						new_tkn.attribute.int_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.int_val;
-						break;
-					case 'F':
-						new_tkn.code = FPL_T;
-						new_tkn.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
-						break;
-				}
+				/* keep first AVID token as lval of expression */
+				if (s_isempty(exp_stck)) { s_push(exp_stck, tkn); break; }
+				/* change to literal type for easier processesing */
+				type = st_get_type(sym_table, tkn->attribute.vid_offset);
+				new_tkn.code = (type == 'I' ? INL_T : FPL_T);
+				if (type == 'I') new_tkn.attribute.int_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.int_val;
+				else new_tkn.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
 				s_push(exp_stck, &new_tkn);
 				break;
 			case ART_OP_T:
 				op2 = (Token*)s_pop(exp_stck);
 				op1 = (Token*)s_pop(exp_stck);
-				switch (tkn->attribute.arr_op) {
-					case PLUS:
-						#ifdef DEBUG
-						printf("In ART_OP_T: PLUS block;\n");
-						#endif
-						if (op1->code == FPL_T || op2->code == FPL_T) {
-							new_tkn.code = FPL_T;
-							new_tkn.attribute.flt_value = (op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-						} else {
-							new_tkn.code = INL_T;
-							new_tkn.attribute.int_value = op1->attribute.int_value + op2->attribute.int_value;
-						}
-						break;
-					case MINUS:
-						#ifdef DEBUG
-						printf("In ART_OP_T: MINUS block;\n");
-						#endif
-						if (op1->code == FPL_T || op2->code == FPL_T) {
-							new_tkn.code = FPL_T;
-							new_tkn.attribute.flt_value = (op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-						} else {
-							new_tkn.code = INL_T;
-							new_tkn.attribute.int_value = op1->attribute.int_value - op2->attribute.int_value;
-						}
-						break;
-					case MULT:
-						#ifdef DEBUG
-						printf("In ART_OP_T: MULT block;\n");
-						#endif
-						if (op1->code == FPL_T || op2->code == FPL_T) {
-							new_tkn.code = FPL_T;
-							new_tkn.attribute.flt_value = (op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-						} else {
-							new_tkn.code = INL_T;
-							new_tkn.attribute.int_value = op1->attribute.int_value * op2->attribute.int_value;
-						}
-						break;
-					case DIV:
-						#ifdef DEBUG
-						printf("In ART_OP_T: DIV block; %f and %f\n", op1->attribute.flt_value, op2->attribute.flt_value);
-						#endif
-						if (op2->attribute.int_value == 0) {
-							printf("Cannot divide by zero.\n");
-							err = 1;
-							break;
-						}
-						if (op1->code == FPL_T || op2->code == FPL_T) {
-							printf("In FPL_T block;\n");
-							new_tkn.code = FPL_T;
-							new_tkn.attribute.flt_value = (op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-						} else {
-							new_tkn.code = INL_T;
-							new_tkn.attribute.int_value = op1->attribute.int_value / op2->attribute.int_value;
-						}
-						break;
+				if (tkn->attribute.arr_op == DIV && !op2->attribute.int_value) {
+					printf("Cannot divide by zero.\n");
+					err = 1;
+					break;
+				} 
+				new_tkn.code = (op1->code == FPL_T || op2->code == FPL_T ? FPL_T : INL_T);
+				if (op1->code == FPL_T || op2->code == FPL_T) {
+					new_tkn.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+														+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+													 tkn->attribute.arr_op == MINUS ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+														- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+													 tkn->attribute.arr_op == MULT  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+														* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+																					  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+														/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
+				} else {
+					new_tkn.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
+													 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
+													 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
+																					  (op1->attribute.int_value / op2->attribute.int_value));
 				}
 				s_push(exp_stck, &new_tkn);
 				break;
 			case SCC_OP_T:
-				#ifdef DEBUG
-				printf("In SCC_OP_T block;\n");
-				#endif
 				op2 = (Token*)s_pop(exp_stck);
 				op1 = (Token*)s_pop(exp_stck);
 				new_tkn.code = STR_T;
 				new_tkn.attribute.str_offset = concat_str(op1, op2);
-				s_push(exp_stck, &new_tkn); 
-				#ifdef DEBUG
-				printf("String offset: %d\n", new_tkn.attribute.str_offset);
-				#endif
+				s_push(exp_stck, &new_tkn);
 				break;
 			case LOG_OP_T:
-				#ifdef DEBUG
-				printf("In LOG_OP_T block;\n");
-				#endif
 				op2 = (Token*)s_pop(exp_stck);
 				op1 = (Token*)s_pop(exp_stck);
 				new_tkn.code = INL_T;
-				new_tkn.attribute.int_value = ((tkn->attribute.log_op == AND) ? 
-					(op1->attribute.int_value && op2->attribute.int_value) : (op1->attribute.int_value || op2->attribute.int_value));
-				s_push(exp_stck, &new_tkn);
+				if (tkn->attribute.log_op == AND)
+					new_tkn.attribute.int_value = !(op1->attribute.int_value) ? op1->attribute.int_value : op2->attribute.int_value;
+				else 
+					new_tkn.attribute.int_value =   op1->attribute.int_value  ? op1->attribute.int_value : op2->attribute.int_value;
 				break;
 			case REL_OP_T:
-				#ifdef DEBUG
-				printf("In REL_OP_T block;\n");
-				#endif
 				op2 = (Token*)s_pop(exp_stck);
 				op1 = (Token*)s_pop(exp_stck);
+				new_tkn.code = INL_T;
 				switch (tkn->attribute.rel_op) {
 					case EQ:
 						new_tkn.attribute.int_value = (op1->code == SVID_T ? 
@@ -931,15 +845,28 @@ static void eval_rpn(void) {
 															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 						break;
 				}
-				new_tkn.code = INL_T;
 				s_push(exp_stck, &new_tkn);
 				break;
 			case ASS_OP_T:
-				#ifdef DEBUG
-				printf("In ASS_OP_T block;\n");
-				#endif
 				op2 = (Token*)s_pop(exp_stck);
 				op1 = (Token*)s_pop(exp_stck);
+				/* if assignment statement only involves one literal then update type */
+				if (assign_asys && sz == 3) {
+					#ifdef DEBUG
+					if (op1->code == 2)
+						printf("Expression: %s = %s;\n", "AVID_T", (op2->code == 4 ? "FPL_T" : "INL_T"));
+					#endif
+					type = st_get_type(sym_table, op1->attribute.vid_offset);
+					#ifdef DEBUG
+					printf("type of lval = %s; %c\n", type == 'F' ? "float" : "int", type);
+					#endif
+					if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
+						st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+						#ifdef DEBUG
+						printf("After st_update_type type of lval = %c;\n", st_get_type(sym_table, op1->attribute.vid_offset));
+						#endif
+					}
+				}
 				switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
 					case 'I':
 						rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
