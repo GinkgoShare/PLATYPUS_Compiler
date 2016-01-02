@@ -11,7 +11,7 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #include "parser.h"
 
 #define DEBUG
-/*#undef DEBUG*/
+#undef DEBUG
 
 extern STD sym_table;								/* Symbol Table Descriptor */
 extern Buffer * str_LTBL;							/* String literal table */
@@ -167,7 +167,7 @@ static void match(int pr_token_code, int pr_token_attribute) {
 					s_push(operators, &lookahead);
 				}
 				break;
-			case AVID_T: case INL_T: case FPL_T: case SVID_T: case STR_T:
+			case AVID_T: case STR_T: case FPL_T: case INL_T: case SVID_T:
 				if (exp_asys) l_add(rpn_exp, &lookahead);
 				break;
 			case ASS_OP_T: case LPR_T:
@@ -790,27 +790,24 @@ static Token* eval_rpn(void) {
 
 	/* EXPRESSION EVALUATION LOOP */
 	for (i = 0, err = 0; i < sz && !err; ++i) {
-
 		Token exp_val;
 		tkn = (Token*)l_get(rpn_exp, i);
-
-		if (tkn->code > 1 && tkn->code < 7) { /* tokens that hold values are in this range */
+		if (tkn->code > 1 && tkn->code < 7) { /* value tokens are in this range */
 			if (tkn->code > 2 || s_isempty(exp_stck)) s_push(exp_stck, tkn);
 			else {
 				/* change to literal type for easier evaluations */
 				char type = st_get_type(sym_table, tkn->attribute.vid_offset);
 				exp_val.code = (type == 'I' ? INL_T : FPL_T);
-				if (type == 'I') exp_val.attribute.int_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.int_val;
-				else exp_val.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
+				if (type == 'I') exp_val.attribute.int_value = sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val;
+				else exp_val.attribute.flt_value = sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val;
 				s_push(exp_stck, &exp_val);
 			}
 		} else if (tkn->code > 6 && tkn->code < 12) { /* operator tokens are in this range */
-
 			Token *op1, *op2;
-			op1 = op2 = NULL;
-			/* pop two tokens off the stack */
-			if (!s_isempty(exp_stck)) op2 = (Token*)s_pop(exp_stck);
-			if (!s_isempty(exp_stck) && tkn->code != ART_OP_T || tkn->attribute.arr_op < UPLUS) op1 = (Token*)s_pop(exp_stck);
+			/* pop tokens off the stack */
+			op2 = (Token*)s_pop(exp_stck);
+			if (tkn->code != ART_OP_T || tkn->attribute.arr_op < UPLUS) op1 = (Token*)s_pop(exp_stck);
+			else op1 = NULL;
 
 			switch (tkn->code) {
 				case SCC_OP_T:
@@ -856,9 +853,6 @@ printf("In ART_OP_T\n");
 					}
 					exp_val.code = op2->code == FPL_T || op1 && op1->code == FPL_T ? FPL_T : INL_T;
 					if (op1) { /* binary operation */
-#ifdef DEBUG
-printf("In binary operation.\n");
-#endif
 						if (op1->code == FPL_T || op2->code == FPL_T) {
 							exp_val.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
 																+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
@@ -869,9 +863,6 @@ printf("In binary operation.\n");
 																							  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
 																/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
 						} else {
-#ifdef DEBUG
-printf("In unary operation.\n");
-#endif
 							exp_val.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
 															 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
 															 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
@@ -894,35 +885,27 @@ printf("In REL_OP_T\n");
 					exp_val.code = INL_T;
 					switch (tkn->attribute.rel_op) {
 						case EQ:
-							exp_val.attribute.int_value = (op1->code == SVID_T ? 
-								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-														== (op2->code == SVID_T ? 
-															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+							exp_val.attribute.int_value  = (op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : 
+								(op1->code == STR_T ? op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														== (op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : (op2->code == STR_T ? 
 																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 							break;
 						case NE:
-							exp_val.attribute.int_value = (op1->code == SVID_T ? 
-								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-														!= (op2->code == SVID_T ? 
-															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+							exp_val.attribute.int_value  = (op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : 
+								(op1->code == STR_T ? op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														!= (op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : (op2->code == STR_T ? 
 																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 							break;
 						case GT:
-							exp_val.attribute.int_value = (op1->code == SVID_T ? 
-								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-														> (op2->code == SVID_T ? 
-															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+							exp_val.attribute.int_value  = (op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : 
+								(op1->code == STR_T ? op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														 > (op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : (op2->code == STR_T ? 
 																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 							break;
 						case LT:
-							exp_val.attribute.int_value = (op1->code == SVID_T ? 
-								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-														< (op2->code == SVID_T ? 
-															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+							exp_val.attribute.int_value  = (op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : 
+								(op1->code == STR_T ? op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														 < (op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : (op2->code == STR_T ? 
 																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 							break;
 					}
@@ -950,8 +933,8 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 Purpose: Concatenate two strings
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 30/12/2015
-Called functions: [ b_size(), st_get_record(), b_setmark(), b_addc() ]
-Parameters: op1 is the first operand, op2 is the second operand
+Called functions: [ b_size(), st_get_ivalue(), b_setmark(), b_addc() ]
+Parameters: str1 is the first string, str2 is the second string to concatenate
 Return value: the offset of the concatenated string stored on the str_LTBL
 Algorithm: set the str_offset to the next available position on the str_LTBL,
 		   get the offset to the first operand string value from the str_LTBL,
@@ -959,23 +942,21 @@ Algorithm: set the str_offset to the next available position on the str_LTBL,
 		   start a new entry in the str_LTBL, repeat for the second operand and
 		   return the offset to the new entry
 *******************************************************************************/
-static int concat_str(Token* op1, Token* op2) {
+static int concat_str(Token* str1, Token* str2) {
 	char* str;
-	int i, mark, str_offset;
+	int i, j, mark, str_offset;
 	str_offset = b_size(str_LTBL);
-	mark = (op1->code == SVID_T ? 
-				st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : 
-				op1->attribute.str_offset);
+	/* string one */
+	mark = str1->code == SVID_T ? sym_table.pstvr[str1->attribute.vid_offset].i_value.str_offset : str1->attribute.str_offset;
 	if (mark >= 0) {
 		str = b_setmark(str_LTBL, mark);
-		for (i = 0; str[i]; ++i) b_addc(str_LTBL, str[i]);
+		for (j=0; str[j]; ++j) b_addc(str_LTBL, str[j]);
 	}
-	mark = (op2->code == SVID_T ? 
-				st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : 
-				op2->attribute.str_offset);
+	/* string two */
+	mark = str2->code == SVID_T ? sym_table.pstvr[str2->attribute.vid_offset].i_value.str_offset : str2->attribute.str_offset;
 	if (mark >= 0) {
 		str = b_setmark(str_LTBL, mark);
-		for (i=0; str[i]; ++i) b_addc(str_LTBL, str[i]);
+		for (j=0; str[j]; ++j) b_addc(str_LTBL, str[j]);
 	}
 	b_addc(str_LTBL, '\0');
 	return str_offset;

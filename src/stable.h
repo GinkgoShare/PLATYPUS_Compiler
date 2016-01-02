@@ -61,6 +61,5 @@ void st_destroy(STD sym_table);
 int st_print(STD sym_table);
 int st_store(STD sym_table);
 int st_sort(STD sym_table, char s_order);
-STVR st_get_record(STD sym_table, int vid_offset);
 
 #endif
