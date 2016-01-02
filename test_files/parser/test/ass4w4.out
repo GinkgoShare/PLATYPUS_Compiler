@@ -72,7 +72,7 @@ PLATY: Primary arithmetic expression parsed
 PLATY: Primary arithmetic expression parsed
 PLATY: Arithmetic expression parsed
 PLATY: Syntax error:  Line: 10
-*****  Token code:  2 Attribute: IbadLong
+*****  Token code:  2 Attribute: badLong8
 PLATY: Primary arithmetic expression parsed
 PLATY: Primary arithmetic expression parsed
 PLATY: Arithmetic expression parsed

@@ -11,7 +11,7 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #include "parser.h"
 
 #define DEBUG
-#undef DEBUG
+/*#undef DEBUG*/
 
 extern STD sym_table;								/* Symbol Table Descriptor */
 extern Buffer * str_LTBL;							/* String literal table */
@@ -23,15 +23,56 @@ static Buffer* sc_buf;
 static Token lookahead;
 static InitialValue rval;
 static Stack* operators;
-static Stack* exp_stck;
 static List* rpn_exp;
 
 int synerrno;
-int assign_asys = 0, exp_asys = 0, unry_asys = 0;
+int assign_asys, exp_asys, unry_asys;
 
 /* static function declarations */
-static void eval_rpn(void);
+static void match(int, int);
+static void syn_eh(int);
+static void syn_printe(void);
+static void gen_incode(char*);
+static char get_exp_type(void);
+static Token* eval_rpn(void);
 static int concat_str(Token* op1, Token* op2);
+
+/* grammar productions */
+static void program(void);
+static void opt_statements(void);
+static void statements(void);
+static void statements_p(void);
+static void statement(void);
+static void assignment_statement(void);
+static void assignment_expression(void);
+static void selection_statement(void);
+static void iteration_statement(void);
+static void input_statement(void);
+static void variable_list(void);
+static void variable_list_p(void);
+static void variable_identifier(void);
+static void output_statement(void);
+static void output_list(void);
+static void arithmetic_expression(void);
+static void unary_arithmetic_expression(void);
+static void additive_arithmetic_expression(void);
+static void additive_arithmetic_expression_p(void);
+static void multiplicative_arithmetic_expression(void);
+static void multiplicative_arithmetic_expression_p(void);
+static void primary_arithmetic_expression(void);
+static void string_expression(void);
+static void string_expression_p(void);
+static void primary_string_expression(void);
+static void conditional_expression(void);
+static void logical_or_expression(void);
+static void logical_or_expression_p(void);
+static void logical_and_expression(void);
+static void logical_and_expression_p(void);
+static void relational_expression(void);
+static void primary_a_relational_expression(void);
+static void primary_a_relational_expression_p(void);
+static void primary_s_relational_expression(void);
+static void primary_s_relational_expression_p(void);
 
 /*
 Author: Sv.Ranev
@@ -39,6 +80,7 @@ Author: Sv.Ranev
 void parser(Buffer * in_buf) {
 	sc_buf = in_buf;
 	lookahead = mlwpar_next_token(sc_buf);
+	assign_asys = exp_asys = unry_asys = 0;
 	program(); match(SEOF_T, NO_ATTR);
 	gen_incode("PLATY: Source file parsed");
 }
@@ -51,7 +93,7 @@ Called functions: syn_eh(), syn_printe(), mlwpar_next_token()
 Parameters: int pr_token_code, int pr_token_attribute
 Return value: void
 *******************************************************************************/
-void match(int pr_token_code, int pr_token_attribute) {
+static void match(int pr_token_code, int pr_token_attribute) {
 	if (lookahead.code == pr_token_code) {
 		if (lookahead.code == SEOF_T) return;
 		switch(pr_token_code) {
@@ -152,7 +194,7 @@ Called functions: exit(), mlwpar_next_token()
 Parameters: int sync_token_code
 Return value: void
 */
-void syn_eh(int sync_token_code) {
+static void syn_eh(int sync_token_code) {
 	syn_printe(); ++synerrno;
 	while((lookahead = mlwpar_next_token(sc_buf)).code != sync_token_code) if (lookahead.code == SEOF_T) exit(synerrno);
 	if (lookahead.code == SEOF_T) return;
@@ -162,7 +204,7 @@ void syn_eh(int sync_token_code) {
 /*
 Author: Sv.Ranev
 */
-void syn_printe(void) {
+static void syn_printe(void) {
 	Token t = lookahead;
 	assign_asys = exp_asys = 0;
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
@@ -236,7 +278,7 @@ Called functions: none
 Parameters: char* string
 Return value: void
 */
-void gen_incode(char* string) {
+static void gen_incode(char* string) {
 	printf("%s\n", string);
 }
 
@@ -245,7 +287,7 @@ void gen_incode(char* string) {
 *	FIRST(<program>)	=  { KW_T(PLATYPUS) }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void program(void){
+static void program(void){
 	match(KW_T,PLATYPUS); match(LBR_T,NO_ATTR); 
 	opt_statements(); match(RBR_T,NO_ATTR);
 	gen_incode("PLATY: Program parsed");
@@ -255,7 +297,7 @@ void program(void){
 *	FIRST(<opt statements)	=  { AVID_T, SVID_T, KW_T(IF), KW_T(USING), KW_T(INPUT), KW_T(OUTPUT), e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void opt_statements(void) {
+static void opt_statements(void) {
 	switch(lookahead.code) {
 	case AVID_T:
 	case SVID_T: statements(); break;
@@ -272,7 +314,7 @@ void opt_statements(void) {
 *	FIRST(<statements>) =  { AVID, SVID, IF, USING, INPUT, OUTPUT }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void statements(void) {
+static void statements(void) {
 	statement(); statements_p();
 }
 /*
@@ -280,7 +322,7 @@ void statements(void) {
 *	FIRST(<statements p>)	=  { AVID, SVID, IF, USING, INPUT, OUTPUT, e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void statements_p(void) {
+static void statements_p(void) {
 	switch(lookahead.code) {
 	case AVID_T:
 	case SVID_T: assignment_statement(); statements_p(); break;
@@ -300,7 +342,7 @@ void statements_p(void) {
 *	FIRST(<statement>)  =  { AVID, SVID, IF, USING, INPUT, OUTPUT }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void statement(void) {
+static void statement(void) {
 	if (lookahead.code == AVID_T || lookahead.code == SVID_T) assignment_statement();
 	else if (lookahead.code == KW_T && 
 		(lookahead.attribute.kwt_idx == IF || lookahead.attribute.kwt_idx == USING 
@@ -318,7 +360,7 @@ void statement(void) {
 *	FIRST(<assignment statement>)	=  { AVID, SVID }
 *   Authors: Christopher Elliott, 040 570 022
 */
-void assignment_statement(void) {
+static void assignment_statement(void) {
 	assign_asys = 1;
 	assignment_expression(); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: Assignment statement parsed");
@@ -329,7 +371,7 @@ void assignment_statement(void) {
 *	FIRST(<assignment expression>)	=  { AVID, SVID }
 *   Authors: Christopher Elliott, 040 570 022
 */
-void assignment_expression(void) {
+static void assignment_expression(void) {
 	exp_asys = 1;
 	rpn_exp = l_create(10, 10, sizeof(Token));
 	operators = s_create(4, 4, sizeof(Token), 'a');
@@ -359,7 +401,7 @@ void assignment_expression(void) {
 *	FIRST(<selection statement>)	=  { IF }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void selection_statement(void) {
+static void selection_statement(void) {
 	match(KW_T, IF); match(LPR_T, NO_ATTR); conditional_expression(); 
 	match(RPR_T, NO_ATTR); match(KW_T, THEN); opt_statements(); match(KW_T, ELSE); 
 	match(LBR_T, NO_ATTR); opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
@@ -373,7 +415,7 @@ void selection_statement(void) {
 *	FIRST(<iteration statement>)	=  { USING }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void iteration_statement(void) {
+static void iteration_statement(void) {
 	match(KW_T, USING); match(LPR_T, NO_ATTR); assignment_expression(); match(COM_T, NO_ATTR);
 	conditional_expression(); match(COM_T, NO_ATTR); assignment_expression(); match(RPR_T, NO_ATTR);
 	match(KW_T, REPEAT); match(LBR_T, NO_ATTR);  opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
@@ -384,7 +426,7 @@ void iteration_statement(void) {
 *	FIRST(<input statement>)	=  { INPUT }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void input_statement(void) {
+static void input_statement(void) {
 	match(KW_T, INPUT); match(LPR_T, NO_ATTR); variable_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: INPUT statement parsed");
 }
@@ -393,7 +435,7 @@ void input_statement(void) {
 *	FIRST(<variable list>)	=  { AVID_T, SVID_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void variable_list(void) {
+static void variable_list(void) {
 	variable_identifier(); variable_list_p();
 	gen_incode("PLATY: Variable list parsed");
 }
@@ -402,7 +444,7 @@ void variable_list(void) {
 *	FIRST(<variable list p>)	=  { ,, e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void variable_list_p(void) {
+static void variable_list_p(void) {
 	if (lookahead.code == COM_T) {
 		match(COM_T, NO_ATTR); variable_identifier(); variable_list_p();
 	}
@@ -412,7 +454,7 @@ void variable_list_p(void) {
 *	FIRST(<variable identifier>)	=  { AVID_T, SVID_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void variable_identifier(void) {
+static void variable_identifier(void) {
 	if (lookahead.code == AVID_T) match(AVID_T, NO_ATTR);
 	else if (lookahead.code == SVID_T) match(SVID_T, NO_ATTR);
 	else syn_printe();
@@ -422,7 +464,7 @@ void variable_identifier(void) {
 *	FIRST(<output statement>)	=  { OUTPUT }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void output_statement(void) {
+static void output_statement(void) {
 	match(KW_T, OUTPUT); match(LPR_T, NO_ATTR); output_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: OUTPUT statement parsed");
 }
@@ -431,7 +473,7 @@ void output_statement(void) {
 *	FIRST(<output list>)	=  { STR_T, AVID_T, SVID_T, e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void output_list(void) {
+static void output_list(void) {
 	switch(lookahead.code) {
 	case AVID_T: case SVID_T: variable_list(); return;
 	case STR_T: match(STR_T, NO_ATTR); gen_incode("PLATY: Output list (string literal) parsed"); return;
@@ -443,7 +485,7 @@ void output_list(void) {
 *	FIRST(<arithmetic exression>)	=  { +, -, AVID_T, FPL_T, INL_T, ( }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void arithmetic_expression(void) {
+static void arithmetic_expression(void) {
 	if (lookahead.code == ART_OP_T && (lookahead.attribute.arr_op == PLUS || lookahead.attribute.arr_op == MINUS)) unary_arithmetic_expression();
 	else if (lookahead.code == AVID_T || lookahead.code == FPL_T || lookahead.code == INL_T || lookahead.code == LPR_T) additive_arithmetic_expression();
 	else { syn_printe(); return; }
@@ -454,7 +496,7 @@ void arithmetic_expression(void) {
 *	FIRST(<unary arithmetic expression>)	=  { +, - }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void unary_arithmetic_expression(void) {
+static void unary_arithmetic_expression(void) {
 	unry_asys = 1;
 	if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == PLUS) {
 		match(ART_OP_T, PLUS);
@@ -472,7 +514,7 @@ void unary_arithmetic_expression(void) {
 *	FIRST(<additive arithmetic expression>) =  { AVID_T, FPL_T, INL_T, ( }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void additive_arithmetic_expression(void) {
+static void additive_arithmetic_expression(void) {
 	multiplicative_arithmetic_expression(); additive_arithmetic_expression_p();
 }
 /*
@@ -482,7 +524,7 @@ void additive_arithmetic_expression(void) {
 *	FIRST(<additive arithmetic expression p>)	=  { +, -, e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void additive_arithmetic_expression_p(void) {
+static void additive_arithmetic_expression_p(void) {
 	if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == PLUS) {
 		match(ART_OP_T, PLUS); multiplicative_arithmetic_expression(); additive_arithmetic_expression_p();
 		gen_incode("PLATY: Additive arithmetic expression parsed");
@@ -496,7 +538,7 @@ void additive_arithmetic_expression_p(void) {
 *	FIRST(<multiplicative arithmetic expression>)	=  { AVID_T, FPL_T, INL_T, ( }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void multiplicative_arithmetic_expression(void) {
+static void multiplicative_arithmetic_expression(void) {
 	primary_arithmetic_expression(); multiplicative_arithmetic_expression_p();
 }
 /*
@@ -506,7 +548,7 @@ void multiplicative_arithmetic_expression(void) {
 *	FIRST(<multiplicative arithmetic expression p>) =  { *, /, e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void multiplicative_arithmetic_expression_p(void) {
+static void multiplicative_arithmetic_expression_p(void) {
 	if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == MULT) {
 		match(ART_OP_T, MULT); primary_arithmetic_expression(); multiplicative_arithmetic_expression_p();
 		gen_incode("PLATY: Multiplicative arithmetic expression parsed");
@@ -520,7 +562,7 @@ void multiplicative_arithmetic_expression_p(void) {
 *	FIRST(<primary arithmetic expression>)	=  { AVID_T, FPL_T, INL_T, ( }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void primary_arithmetic_expression(void) {
+static void primary_arithmetic_expression(void) {
 	switch(lookahead.code) {
 	case AVID_T: match(AVID_T, NO_ATTR); break;
 	case FPL_T: match(FPL_T, NO_ATTR); break;
@@ -535,7 +577,7 @@ void primary_arithmetic_expression(void) {
 *	FIRST(<string expression>)	=  { SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void string_expression(void) {
+static void string_expression(void) {
 	primary_string_expression(); string_expression_p();
 	gen_incode("PLATY: String expression parsed");
 }
@@ -544,7 +586,7 @@ void string_expression(void) {
 *	FIRST(<string expression p>)	=  { #, e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void string_expression_p(void) {
+static void string_expression_p(void) {
 	if (lookahead.code == SCC_OP_T) {
 		match(SCC_OP_T, NO_ATTR); primary_string_expression(); string_expression_p();
 	}
@@ -554,7 +596,7 @@ void string_expression_p(void) {
 *	FIRST(<primary string expression>)	=  { SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void primary_string_expression(void) {
+static void primary_string_expression(void) {
 	if (lookahead.code == SVID_T) match(SVID_T, NO_ATTR);
 	else if (lookahead.code == STR_T) match(STR_T, NO_ATTR);
 	else { syn_printe(); return; }
@@ -565,7 +607,8 @@ void primary_string_expression(void) {
 *	FIRST(<conditional expression>) =  { AVID_T, FPL_T, INL_T, SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void conditional_expression(void) {
+static void conditional_expression(void) {
+	Token * tkn;
 	exp_asys = 1;
 	rpn_exp = l_create(10, 10, sizeof(Token));
 	operators = s_create(4, 4, sizeof(Token), 'a');
@@ -574,22 +617,23 @@ void conditional_expression(void) {
 	gen_incode("PLATY: Conditional expression parsed");
 
 	/* evaluate RPN */
-	/* evaluate RPN */
 	if (exp_asys) {
-		eval_rpn();
+		tkn = eval_rpn();
+#ifdef DEBUG
+printf("Conditional expression value is %s.\n", tkn->attribute.int_value ? "true" : "false");
+#endif
 		exp_asys = 0;
 	}
 
 	s_destroy(operators);
 	l_destroy(rpn_exp);
-	exp_asys = 0;
 }
 /*
 *	<logical OR expression>			-> <logical AND expression> <logical OR expression p>
 *	FIRST(<logical OR expression>)	=  { AVID_T, FPL_T, INL_T, SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void logical_or_expression(void) {
+static void logical_or_expression(void) {
 	logical_and_expression(); logical_or_expression_p();
 }
 /*
@@ -597,7 +641,7 @@ void logical_or_expression(void) {
 *	FIRST(<logical OR expression p>)	=  { .OR., e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void logical_or_expression_p(void) {
+static void logical_or_expression_p(void) {
 	if (lookahead.code == LOG_OP_T && lookahead.attribute.log_op == OR) {
 		match(LOG_OP_T, OR); logical_and_expression(); logical_or_expression_p();
 		gen_incode("PLATY: Logical OR expression parsed");
@@ -608,7 +652,7 @@ void logical_or_expression_p(void) {
 *	FIRST(<logical AND expression>) =  { AVID_T, FPL_T, INL_T, SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void logical_and_expression(void) {
+static void logical_and_expression(void) {
 	relational_expression(); logical_and_expression_p();
 }
 /*
@@ -616,7 +660,7 @@ void logical_and_expression(void) {
 *	FIRST(<logical AND expression p>)	=  { .AND., e }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void logical_and_expression_p(void) {
+static void logical_and_expression_p(void) {
 	if (lookahead.code == LOG_OP_T && lookahead.attribute.log_op == AND) {
 		match(LOG_OP_T, AND); relational_expression(); logical_and_expression_p();
 		gen_incode("PLATY: Logical AND expression parsed");
@@ -628,7 +672,7 @@ void logical_and_expression_p(void) {
 *	FIRST(relational expression>)	=  { AVID_T, FPL_T, INL_T, SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void relational_expression(void) {
+static void relational_expression(void) {
 	switch(lookahead.code) {
 	case AVID_T: case FPL_T: case INL_T:
 		primary_a_relational_expression(); primary_a_relational_expression_p();
@@ -646,7 +690,7 @@ void relational_expression(void) {
 *	FIRST(<primary a_relational expression>)	=  { AVID_T, FPL_T, INL_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void primary_a_relational_expression(void) {
+static void primary_a_relational_expression(void) {
 	switch(lookahead.code) {
 	case AVID_T:
 		match(AVID_T, NO_ATTR); break;
@@ -667,7 +711,7 @@ void primary_a_relational_expression(void) {
 *	FIRST(<primary a_relational expression p>)	=  { ==, <>, >, < }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void primary_a_relational_expression_p(void) {
+static void primary_a_relational_expression_p(void) {
 	if (lookahead.code == REL_OP_T) {
 		switch(lookahead.attribute.rel_op) {
 		case EQ:
@@ -689,7 +733,7 @@ void primary_a_relational_expression_p(void) {
 *	FIRST(<primary s_relational expression>)	=  { SVID_T, STR_T }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void primary_s_relational_expression(void) {
+static void primary_s_relational_expression(void) {
 	primary_string_expression();
 	gen_incode("PLATY: Primary s_relational expression parsed");
 }
@@ -701,7 +745,7 @@ void primary_s_relational_expression(void) {
 *	FIRST(<primary s_relational expression p>)	=  { ==, <>, >, < }
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
-void primary_s_relational_expression_p(void) {
+static void primary_s_relational_expression_p(void) {
 	if (lookahead.code == REL_OP_T) {
 		switch(lookahead.attribute.rel_op) {
 		case EQ:
@@ -732,17 +776,19 @@ Algorithm: unload the remaining operators off the stack, create a new stack for
 		   encountered then pop two operands of the stack, evaluate the
 		   expression and push the value on the stack
 *******************************************************************************/
-static void eval_rpn(void) {
+static Token* eval_rpn(void) {
 
+	/* PRE-CONDITIONS */
 	Token *tkn;
 	int i, sz, err;
-
+	Stack* exp_stck;
 	/* unload remaining operators off stack to expression list */
 	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
-
 	sz = l_size(rpn_exp);
 	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
+	/* END PRE-CONDITIONS */
 
+	/* EXPRESSION EVALUATION LOOP */
 	for (i = 0, err = 0; i < sz && !err; ++i) {
 
 		Token exp_val;
@@ -758,173 +804,147 @@ static void eval_rpn(void) {
 				else exp_val.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
 				s_push(exp_stck, &exp_val);
 			}
-		} else if (tkn->code > 6 && tkn->code < 12) { /* token is an operator */
+		} else if (tkn->code > 6 && tkn->code < 12) { /* operator tokens are in this range */
+
 			Token *op1, *op2;
 			op1 = op2 = NULL;
 			/* pop two tokens off the stack */
 			if (!s_isempty(exp_stck)) op2 = (Token*)s_pop(exp_stck);
+			if (!s_isempty(exp_stck) && tkn->code != ART_OP_T || tkn->attribute.arr_op < UPLUS) op1 = (Token*)s_pop(exp_stck);
 
-#ifdef DEBUG
-if (!op2) {
-	printf("***ERROR READING FROM STACK GETTING OP2 FOR EVALUATION***\n");
-	err = 1;
-	continue;
-}
-#endif
-			if (!s_isempty(exp_stck) && tkn->code != ART_OP_T || tkn->attribute.arr_op < UPLUS) {
-				op1 = (Token*)s_pop(exp_stck);
-#ifdef DEBUG
-if (!op1) {
-	printf("***ERROR READING FROM STACK GETTING OP1 FOR EVALUATION***\n");
-	err = 1;
-	continue;
-}
-#endif
-			}
 			switch (tkn->code) {
-			case SCC_OP_T:
+				case SCC_OP_T:
 #ifdef DEBUG
 printf("In SCC_OP_T\n");
 #endif
-				exp_val.code = STR_T;
-				exp_val.attribute.str_offset = concat_str(op1, op2);
-				s_push(exp_stck, &exp_val);
-				break;
-			case ASS_OP_T:
+					exp_val.code = STR_T;
+					exp_val.attribute.str_offset = concat_str(op1, op2);
+					break;
+				case ASS_OP_T:
 #ifdef DEBUG
 printf("In ASS_OP_T\n");
 #endif
-				/* if assignment statement only involves one literal then update type */
-				if (assign_asys && sz == 3) {
-					char type = st_get_type(sym_table, op1->attribute.vid_offset);
-					if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
-						st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+					/* if assignment statement only involves one literal then update type */
+					if (assign_asys && sz == 3) {
+						char type = st_get_type(sym_table, op1->attribute.vid_offset);
+						if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
+							st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+						}
 					}
-				}
-				switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
-					case 'I':
-						rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
-						break;
-					case 'F':
-						rval.fpl_val = (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-						break;
-					case 'S':
-						rval.str_offset = op2->attribute.str_offset;
-						break;
-				}		
-				st_update_value(sym_table, op1->attribute.vid_offset, rval);
-				break;
-			case ART_OP_T:
+					switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
+						case 'I':
+							rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
+							break;
+						case 'F':
+							rval.fpl_val = (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
+							break;
+						case 'S':
+							rval.str_offset = op2->attribute.str_offset;
+							break;
+					}		
+					st_update_value(sym_table, op1->attribute.vid_offset, rval);
+					break;
+				case ART_OP_T:
 #ifdef DEBUG
 printf("In ART_OP_T\n");
 #endif
-				/* divide by zero will break out of evaluation and print the error to console */
-				if (tkn->attribute.arr_op == DIV && !op2->attribute.int_value) {
-					printf("***CANNOT DIVIDE BY ZERO***\n");
-					err = 1;
-					break;
-				}
-				exp_val.code = op2->code == FPL_T || op1 && op1->code == FPL_T ? FPL_T : INL_T;
-				if (op1) { /* binary operation */
+					/* divide by zero will break out of evaluation and print the error to console */
+					if (tkn->attribute.arr_op == DIV && !op2->attribute.int_value) {
+						printf("***CANNOT DIVIDE BY ZERO***\n");
+						err = 1;
+						break;
+					}
+					exp_val.code = op2->code == FPL_T || op1 && op1->code == FPL_T ? FPL_T : INL_T;
+					if (op1) { /* binary operation */
 #ifdef DEBUG
 printf("In binary operation.\n");
 #endif
-					if (op1->code == FPL_T || op2->code == FPL_T) {
-						exp_val.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-															+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-														 tkn->attribute.arr_op == MINUS ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-															- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-														 tkn->attribute.arr_op == MULT  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-															* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-																						  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-															/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
-					} else {
-						exp_val.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
-														 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
-														 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
-																						  (op1->attribute.int_value / op2->attribute.int_value));
-					}
-				} else if (op2) { /* unary operation */
-					if (tkn->attribute.arr_op == UMINUS) {
-						if (op2->code == FPL_T) exp_val.attribute.flt_value = -op2->attribute.flt_value;
-						else exp_val.attribute.int_value = -op2->attribute.int_value;
-					} else {
-						if (op2->code == FPL_T) exp_val.attribute.flt_value = op2->attribute.flt_value;
-						else exp_val.attribute.int_value = op2->attribute.int_value;
-					}
-				}			
-				s_push(exp_stck, &exp_val);
+						if (op1->code == FPL_T || op2->code == FPL_T) {
+							exp_val.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+																+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+															 tkn->attribute.arr_op == MINUS ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+																- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+															 tkn->attribute.arr_op == MULT  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+																* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+																							  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+																/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
+						} else {
 #ifdef DEBUG
-printf("exp_val code is %d\n", exp_val.code);
-if (op2->code == FPL_T)
-	printf("exp_val attribute is %f\n", exp_val.attribute.flt_value);
-else
-	printf("exp_val attribute is %f\n", exp_val.attribute.int_value);
+printf("In unary operation.\n");
 #endif
-				break;
-			case REL_OP_T:
+							exp_val.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
+															 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
+															 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
+																							  (op1->attribute.int_value / op2->attribute.int_value));
+						}
+					} else if (op2) { /* unary operation */
+						if (tkn->attribute.arr_op == UMINUS) {
+							if (op2->code == FPL_T) exp_val.attribute.flt_value = -op2->attribute.flt_value;
+							else exp_val.attribute.int_value = -op2->attribute.int_value;
+						} else {
+							if (op2->code == FPL_T) exp_val.attribute.flt_value = op2->attribute.flt_value;
+							else exp_val.attribute.int_value = op2->attribute.int_value;
+						}
+					}			
+					break;
+				case REL_OP_T:
 #ifdef DEBUG
 printf("In REL_OP_T\n");
 #endif
-				exp_val.code = INL_T;
-				switch (tkn->attribute.rel_op) {
-					case EQ:
-						exp_val.attribute.int_value = (op1->code == SVID_T ? 
-							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-													== (op2->code == SVID_T ? 
-														st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
-															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
-						break;
-					case NE:
-						exp_val.attribute.int_value = (op1->code == SVID_T ? 
-							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-													!= (op2->code == SVID_T ? 
-														st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
-															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
-						break;
-					case GT:
-						exp_val.attribute.int_value = (op1->code == SVID_T ? 
-							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-													> (op2->code == SVID_T ? 
-														st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
-															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
-						break;
-					case LT:
-						exp_val.attribute.int_value = (op1->code == SVID_T ? 
-							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
-								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
-													< (op2->code == SVID_T ? 
-														st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
-															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
-						break;
-				}
-				s_push(exp_stck, &exp_val);
-				break;
-			case LOG_OP_T:
+					exp_val.code = INL_T;
+					switch (tkn->attribute.rel_op) {
+						case EQ:
+							exp_val.attribute.int_value = (op1->code == SVID_T ? 
+								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
+									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														== (op2->code == SVID_T ? 
+															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
+							break;
+						case NE:
+							exp_val.attribute.int_value = (op1->code == SVID_T ? 
+								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
+									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														!= (op2->code == SVID_T ? 
+															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
+							break;
+						case GT:
+							exp_val.attribute.int_value = (op1->code == SVID_T ? 
+								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
+									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														> (op2->code == SVID_T ? 
+															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
+							break;
+						case LT:
+							exp_val.attribute.int_value = (op1->code == SVID_T ? 
+								st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
+									op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
+														< (op2->code == SVID_T ? 
+															st_get_record(sym_table, op2->attribute.vid_offset).i_value.str_offset : (op2->code == STR_T ? 
+																op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
+							break;
+					}
+					break;
+				case LOG_OP_T:
 #ifdef DEBUG
 printf("In LOG_OP_T\n");
 printf("Tkn->attribute.log_op is %d.\n", tkn->attribute.log_op);
 printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d.\n", tkn->attribute.log_op, op1->attribute.int_value, op2->attribute.int_value);
 #endif
-				exp_val.code = INL_T;
-				if (tkn->attribute.log_op == AND)
-					exp_val.attribute.int_value = (op1->attribute.int_value ? op2->attribute.int_value : op1->attribute.int_value);
-				else 
-					exp_val.attribute.int_value = (op1->attribute.int_value ? op1->attribute.int_value : op2->attribute.int_value);
-				s_push(exp_stck, &exp_val);
-				break;
+					exp_val.code = INL_T;
+					if (tkn->attribute.log_op == AND)
+						exp_val.attribute.int_value = (op1->attribute.int_value ? op2->attribute.int_value : op1->attribute.int_value);
+					else 
+						exp_val.attribute.int_value = (op1->attribute.int_value ? op1->attribute.int_value : op2->attribute.int_value);
+					break;
 			}
+			s_push(exp_stck, &exp_val);
 		}	
-	}
-#ifdef DEBUG
-if (!s_isempty(exp_stck)) {
-	printf("Conditional expression value is %s.\n", (((Token*)s_pop(exp_stck))->attribute.int_value ? "true" : "false"));
-}
-#endif
-	s_destroy(exp_stck);
+	} /* END EXPRESSION EVALUATION LOOP */
+
+	return (Token*)s_pop(exp_stck);
 }
 /*******************************************************************************
 Purpose: Concatenate two strings

@@ -71,6 +71,7 @@ PLATY: Primary arithmetic expression parsed
 PLATY: Additive arithmetic expression parsed
 PLATY: Arithmetic expression parsed
 PLATY: Assignment expression (arithmetic) parsed
+***CANNOT DIVIDE BY ZERO***
 PLATY: Assignment statement parsed
 PLATY: Primary arithmetic expression parsed
 PLATY: Arithmetic expression parsed

@@ -45,6 +45,7 @@ PLATY: Multiplicative arithmetic expression parsed
 PLATY: Additive arithmetic expression parsed
 PLATY: Arithmetic expression parsed
 PLATY: Assignment expression (arithmetic) parsed
+***CANNOT DIVIDE BY ZERO***
 PLATY: Syntax error:  Line:  8
 *****  Token code: 13 Attribute: NA
 PLATY: Assignment statement parsed
