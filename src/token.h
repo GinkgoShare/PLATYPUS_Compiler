@@ -44,7 +44,7 @@
 
 /* Operators token attributes */
 
-typedef enum ArithmeticOperators  {PLUS, MINUS, MULT, DIV} Arr_Op;
+typedef enum ArithmeticOperators  {PLUS, MINUS, MULT, DIV, UPLUS, UMINUS} Arr_Op;
 typedef enum RelationalOperators  {EQ, NE, GT, LT} Rel_Op;
 typedef enum LogicalOperators     {AND,OR} Log_Op;
 
@@ -58,11 +58,10 @@ typedef union TokenAttribute{
 	Log_Op log_op;				/* logical operator attribute code */
 	int int_value;				/* integer literal attribute (value) */
 	int kwt_idx;				/* keyword index in the keyword table */	  
-	short str_offset;			/* sring literal offset from the beginning of */
-								/* the string literal buffer (str_LTBL->cb_head) */
+	short str_offset;			/* sring literal offset from the beginning of
+								   the string literal buffer (str_LTBL->cb_head) */
 	float flt_value;			/* floating-point literal attribute (value) */
-    /*char vid_lex[VID_LEN+1];*/	/* variable identifier token attribute */
-	int vid_offset;
+	int vid_offset;				/* variable identifier offset in synbol table */
     char err_lex[ERR_LEN+1];	/* error token attribite */
   } TA;
 

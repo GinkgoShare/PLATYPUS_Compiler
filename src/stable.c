@@ -19,7 +19,7 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #include "stable.h"
 
 #define DEBUG
-/*#undef DEBUG*/
+#undef DEBUG
 
 extern STD sym_table; /* global sym_table variable */
 
@@ -163,18 +163,17 @@ Return value: int vid_offset or -1 if fail
 *******************************************************************************/
 int st_update_value(STD sym_table, int vid_offset, InitialValue i_value) {
 	if ((!sym_table.st_size || vid_offset < 0) && vid_offset >= sym_table.st_size) return R_FAIL_1;
-	#ifdef DEBUG
-	printf("Before update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
-	printf("Before update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
-	printf("Before update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
-	printf("VID offset is %d\n", vid_offset);
-	#endif
+#ifdef DEBUG
+printf("Before update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
+printf("Before update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
+printf("Before update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
+#endif
 	sym_table.pstvr[vid_offset].i_value = i_value;
-	#ifdef DEBUG
-	printf("After update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
-	printf("After update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
-	printf("After update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
-	#endif
+#ifdef DEBUG
+printf("After update value int = %d;\n", sym_table.pstvr[vid_offset].i_value.int_val);
+printf("After update value flt = %f;\n", sym_table.pstvr[vid_offset].i_value.fpl_val);
+printf("After update value str = %d;\n", sym_table.pstvr[vid_offset].i_value.str_offset);
+#endif
 	return vid_offset;
 }
 

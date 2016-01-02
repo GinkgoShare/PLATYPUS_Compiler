@@ -11,7 +11,7 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #include "parser.h"
 
 #define DEBUG
-/*#undef DEBUG*/
+#undef DEBUG
 
 extern STD sym_table;								/* Symbol Table Descriptor */
 extern Buffer * str_LTBL;							/* String literal table */
@@ -80,13 +80,9 @@ void match(int pr_token_code, int pr_token_attribute) {
 			case ART_OP_T:
 				if (lookahead.attribute.arr_op == pr_token_attribute) {
 					if (exp_asys) {
+						/* grammar only allows unary operators in single expressions so no need to check precedence */
 						if (unry_asys) {
-							Token new_tkn;
-							new_tkn.code = LPR_T;
-							s_push(operators, &new_tkn);
-							new_tkn.code = INL_T;
-							new_tkn.attribute.int_value = 0;
-							l_add(rpn_exp, &new_tkn);
+							lookahead.attribute.arr_op = lookahead.attribute.arr_op == MINUS ? UMINUS : UPLUS;
 							unry_asys = 0;
 						} else {
 							while (!s_isempty(operators)) {
@@ -168,6 +164,7 @@ Author: Sv.Ranev
 */
 void syn_printe(void) {
 	Token t = lookahead;
+	assign_asys = exp_asys = 0;
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
 	printf("*****  Token code:%3d Attribute: ",t.code);
 	switch(t.code){
@@ -348,16 +345,13 @@ void assignment_expression(void) {
 	}
 
 	/* evaluate RPN */
-	#ifdef DEBUG
-	printf("Before eval_rpn\n");
-	#endif
-	eval_rpn();
-	#ifdef DEBUG
-	printf("After eval_rpn\n");
-	#endif
+	if (exp_asys) {
+		eval_rpn();
+		exp_asys = 0;
+	}
+
 	s_destroy(operators);
 	l_destroy(rpn_exp);
-	exp_asys = 0;
 }
 /*
 *	<selection statement>			-> IF ( <conditional expression> ) THEN <opt statments>
@@ -461,16 +455,17 @@ void arithmetic_expression(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 void unary_arithmetic_expression(void) {
-	Token* tkn;
 	unry_asys = 1;
 	if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == PLUS) {
-		match(ART_OP_T, PLUS); primary_arithmetic_expression();
+		match(ART_OP_T, PLUS);
 	} else if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == MINUS) {
-		match(ART_OP_T, MINUS); primary_arithmetic_expression();
-	} else { syn_printe(); return; }
+		match(ART_OP_T, MINUS);
+	} else { 
+		syn_printe();
+		return;
+	}
+	primary_arithmetic_expression();
 	gen_incode("PLATY: Unary arithmetic expression parsed");
-	for (tkn = (Token*)s_pop(operators); tkn->code != LPR_T; tkn = (Token*)s_pop(operators))
-		l_add(rpn_exp, tkn);
 }
 /*
 *	<additive arithmetic expression>		-> <multiplicative arithmetic expression> <additive arithmetic expression p>
@@ -579,13 +574,12 @@ void conditional_expression(void) {
 	gen_incode("PLATY: Conditional expression parsed");
 
 	/* evaluate RPN */
-	#ifdef DEBUG
-	printf("Before conditional_expression eval_rpn\n");
-	#endif
-	eval_rpn();
-	#ifdef DEBUG
-	printf("After conditional_expression  eval_rpn\n");
-	#endif
+	/* evaluate RPN */
+	if (exp_asys) {
+		eval_rpn();
+		exp_asys = 0;
+	}
+
 	s_destroy(operators);
 	l_destroy(rpn_exp);
 	exp_asys = 0;
@@ -743,14 +737,15 @@ static void eval_rpn(void) {
 	Token *tkn;
 	int i, sz, err;
 
-	/* empty remaining operators on stack to expression list */
+	/* unload remaining operators off stack to expression list */
 	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
+
 	sz = l_size(rpn_exp);
 	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
 
 	for (i = 0, err = 0; i < sz && !err; ++i) {
 
-		Token new_tkn;
+		Token exp_val;
 		tkn = (Token*)l_get(rpn_exp, i);
 
 		if (tkn->code > 1 && tkn->code < 7) { /* tokens that hold values are in this range */
@@ -758,28 +753,47 @@ static void eval_rpn(void) {
 			else {
 				/* change to literal type for easier evaluations */
 				char type = st_get_type(sym_table, tkn->attribute.vid_offset);
-				new_tkn.code = (type == 'I' ? INL_T : FPL_T);
-				if (type == 'I') new_tkn.attribute.int_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.int_val;
-				else new_tkn.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
-				s_push(exp_stck, &new_tkn);
+				exp_val.code = (type == 'I' ? INL_T : FPL_T);
+				if (type == 'I') exp_val.attribute.int_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.int_val;
+				else exp_val.attribute.flt_value = st_get_record(sym_table, tkn->attribute.vid_offset).i_value.fpl_val;
+				s_push(exp_stck, &exp_val);
 			}
-		} else { /* token is an operator */
+		} else if (tkn->code > 6 && tkn->code < 12) { /* token is an operator */
 			Token *op1, *op2;
-			op2 = (Token*)s_pop(exp_stck);
-			op1 = (Token*)s_pop(exp_stck);
+			op1 = op2 = NULL;
+			/* pop two tokens off the stack */
+			if (!s_isempty(exp_stck)) op2 = (Token*)s_pop(exp_stck);
+
+#ifdef DEBUG
+if (!op2) {
+	printf("***ERROR READING FROM STACK GETTING OP2 FOR EVALUATION***\n");
+	err = 1;
+	continue;
+}
+#endif
+			if (!s_isempty(exp_stck) && tkn->code != ART_OP_T || tkn->attribute.arr_op < UPLUS) {
+				op1 = (Token*)s_pop(exp_stck);
+#ifdef DEBUG
+if (!op1) {
+	printf("***ERROR READING FROM STACK GETTING OP1 FOR EVALUATION***\n");
+	err = 1;
+	continue;
+}
+#endif
+			}
 			switch (tkn->code) {
 			case SCC_OP_T:
-				#ifdef DEBUG
-					printf("In SCC_OP_T\n");
-				#endif
-				new_tkn.code = STR_T;
-				new_tkn.attribute.str_offset = concat_str(op1, op2);
-				s_push(exp_stck, &new_tkn);
+#ifdef DEBUG
+printf("In SCC_OP_T\n");
+#endif
+				exp_val.code = STR_T;
+				exp_val.attribute.str_offset = concat_str(op1, op2);
+				s_push(exp_stck, &exp_val);
 				break;
 			case ASS_OP_T:
-				#ifdef DEBUG
-					printf("In ASS_OP_T\n");
-				#endif
+#ifdef DEBUG
+printf("In ASS_OP_T\n");
+#endif
 				/* if assignment statement only involves one literal then update type */
 				if (assign_asys && sz == 3) {
 					char type = st_get_type(sym_table, op1->attribute.vid_offset);
@@ -801,40 +815,61 @@ static void eval_rpn(void) {
 				st_update_value(sym_table, op1->attribute.vid_offset, rval);
 				break;
 			case ART_OP_T:
-				#ifdef DEBUG
-					printf("In ART_OP_T\n");
-				#endif
+#ifdef DEBUG
+printf("In ART_OP_T\n");
+#endif
+				/* divide by zero will break out of evaluation and print the error to console */
 				if (tkn->attribute.arr_op == DIV && !op2->attribute.int_value) {
-					printf("Cannot divide by zero.\n");
+					printf("***CANNOT DIVIDE BY ZERO***\n");
 					err = 1;
 					break;
-				} 
-				new_tkn.code = (op1->code == FPL_T || op2->code == FPL_T ? FPL_T : INL_T);
-				if (op1->code == FPL_T || op2->code == FPL_T) {
-					new_tkn.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-													 tkn->attribute.arr_op == MINUS ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-													 tkn->attribute.arr_op == MULT  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-																					  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-														/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
-				} else {
-					new_tkn.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
-													 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
-													 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
-																					  (op1->attribute.int_value / op2->attribute.int_value));
 				}
-				s_push(exp_stck, &new_tkn);
+				exp_val.code = op2->code == FPL_T || op1 && op1->code == FPL_T ? FPL_T : INL_T;
+				if (op1) { /* binary operation */
+#ifdef DEBUG
+printf("In binary operation.\n");
+#endif
+					if (op1->code == FPL_T || op2->code == FPL_T) {
+						exp_val.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+															+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+														 tkn->attribute.arr_op == MINUS ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+															- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+														 tkn->attribute.arr_op == MULT  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+															* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
+																						  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
+															/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
+					} else {
+						exp_val.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
+														 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
+														 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
+																						  (op1->attribute.int_value / op2->attribute.int_value));
+					}
+				} else if (op2) { /* unary operation */
+					if (tkn->attribute.arr_op == UMINUS) {
+						if (op2->code == FPL_T) exp_val.attribute.flt_value = -op2->attribute.flt_value;
+						else exp_val.attribute.int_value = -op2->attribute.int_value;
+					} else {
+						if (op2->code == FPL_T) exp_val.attribute.flt_value = op2->attribute.flt_value;
+						else exp_val.attribute.int_value = op2->attribute.int_value;
+					}
+				}			
+				s_push(exp_stck, &exp_val);
+#ifdef DEBUG
+printf("exp_val code is %d\n", exp_val.code);
+if (op2->code == FPL_T)
+	printf("exp_val attribute is %f\n", exp_val.attribute.flt_value);
+else
+	printf("exp_val attribute is %f\n", exp_val.attribute.int_value);
+#endif
 				break;
 			case REL_OP_T:
-				#ifdef DEBUG
-					printf("In REL_OP_T\n");
-				#endif
-				new_tkn.code = INL_T;
+#ifdef DEBUG
+printf("In REL_OP_T\n");
+#endif
+				exp_val.code = INL_T;
 				switch (tkn->attribute.rel_op) {
 					case EQ:
-						new_tkn.attribute.int_value = (op1->code == SVID_T ? 
+						exp_val.attribute.int_value = (op1->code == SVID_T ? 
 							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
 								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
 													== (op2->code == SVID_T ? 
@@ -842,7 +877,7 @@ static void eval_rpn(void) {
 															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 						break;
 					case NE:
-						new_tkn.attribute.int_value = (op1->code == SVID_T ? 
+						exp_val.attribute.int_value = (op1->code == SVID_T ? 
 							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
 								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
 													!= (op2->code == SVID_T ? 
@@ -850,7 +885,7 @@ static void eval_rpn(void) {
 															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 						break;
 					case GT:
-						new_tkn.attribute.int_value = (op1->code == SVID_T ? 
+						exp_val.attribute.int_value = (op1->code == SVID_T ? 
 							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
 								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
 													> (op2->code == SVID_T ? 
@@ -858,7 +893,7 @@ static void eval_rpn(void) {
 															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 						break;
 					case LT:
-						new_tkn.attribute.int_value = (op1->code == SVID_T ? 
+						exp_val.attribute.int_value = (op1->code == SVID_T ? 
 							st_get_record(sym_table, op1->attribute.vid_offset).i_value.str_offset : (op1->code == STR_T ? 
 								op1->attribute.str_offset : (op1->code == FPL_T ? op1->attribute.flt_value : op1->attribute.int_value)))
 													< (op2->code == SVID_T ? 
@@ -866,29 +901,29 @@ static void eval_rpn(void) {
 															op2->attribute.str_offset : (op2->code == FPL_T ? op2->attribute.flt_value : op2->attribute.int_value)));
 						break;
 				}
-				s_push(exp_stck, &new_tkn);
+				s_push(exp_stck, &exp_val);
 				break;
 			case LOG_OP_T:
-				#ifdef DEBUG
-					printf("In LOG_OP_T\n");
-					printf("Tkn->attribute.log_op is %d.\n", tkn->attribute.log_op);
-					printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d.\n", tkn->attribute.log_op, op1->attribute.int_value, op2->attribute.int_value);
-				#endif
-				new_tkn.code = INL_T;
+#ifdef DEBUG
+printf("In LOG_OP_T\n");
+printf("Tkn->attribute.log_op is %d.\n", tkn->attribute.log_op);
+printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d.\n", tkn->attribute.log_op, op1->attribute.int_value, op2->attribute.int_value);
+#endif
+				exp_val.code = INL_T;
 				if (tkn->attribute.log_op == AND)
-					new_tkn.attribute.int_value = (op1->attribute.int_value ? op2->attribute.int_value : op1->attribute.int_value);
+					exp_val.attribute.int_value = (op1->attribute.int_value ? op2->attribute.int_value : op1->attribute.int_value);
 				else 
-					new_tkn.attribute.int_value = (op1->attribute.int_value ? op1->attribute.int_value : op2->attribute.int_value);
-				s_push(exp_stck, &new_tkn);
+					exp_val.attribute.int_value = (op1->attribute.int_value ? op1->attribute.int_value : op2->attribute.int_value);
+				s_push(exp_stck, &exp_val);
 				break;
 			}
 		}	
 	}
-	#ifdef DEBUG
-	if (!s_isempty(exp_stck)) {
-		printf("Conditional expression value is %s.\n", (((Token*)s_pop(exp_stck))->attribute.int_value ? "true" : "false"));
-	}
-	#endif
+#ifdef DEBUG
+if (!s_isempty(exp_stck)) {
+	printf("Conditional expression value is %s.\n", (((Token*)s_pop(exp_stck))->attribute.int_value ? "true" : "false"));
+}
+#endif
 	s_destroy(exp_stck);
 }
 /*******************************************************************************
