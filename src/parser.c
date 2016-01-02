@@ -13,9 +13,9 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #define DEBUG
 /*#undef DEBUG*/
 
-#define get_num_value(op) (st_get_type(sym_table, op->attribute.vid_offset) == 'F' ? \
+#define get_num_value(op) (op->code == AVID_T && st_get_type(sym_table, op->attribute.vid_offset) == 'F' ? \
 						  sym_table.pstvr[op->attribute.vid_offset].i_value.fpl_val : \
-						  st_get_type(sym_table, op->attribute.vid_offset) == 'I' ? \
+						  op->code == AVID_T && st_get_type(sym_table, op->attribute.vid_offset) == 'I' ? \
 						  sym_table.pstvr[op->attribute.vid_offset].i_value.int_val : \
 						  op->code == FPL_T ? op->attribute.flt_value : op->attribute.int_value)
 
@@ -33,7 +33,7 @@ static Stack* operators;
 static List* rpn_exp;
 
 int synerrno;
-int assign_asys, exp_asys, unry_asys;
+int asgn_stmt_asys, exp_asys, unry_asys;
 
 /* static function declarations */
 static void match(int, int);
@@ -87,7 +87,7 @@ Author: Sv.Ranev
 void parser(Buffer * in_buf) {
 	sc_buf = in_buf;
 	lookahead = mlwpar_next_token(sc_buf);
-	assign_asys = exp_asys = unry_asys = 0;
+	asgn_stmt_asys = exp_asys = unry_asys = 0;
 	program(); match(SEOF_T, NO_ATTR);
 	gen_incode("PLATY: Source file parsed");
 }
@@ -213,7 +213,7 @@ Author: Sv.Ranev
 */
 static void syn_printe(void) {
 	Token t = lookahead;
-	assign_asys = exp_asys = 0;
+	asgn_stmt_asys = exp_asys = 0;
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
 	printf("*****  Token code:%3d Attribute: ",t.code);
 	switch(t.code){
@@ -368,10 +368,10 @@ static void statement(void) {
 *   Authors: Christopher Elliott, 040 570 022
 */
 static void assignment_statement(void) {
-	assign_asys = 1;
+	asgn_stmt_asys = 1;
 	assignment_expression(); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: Assignment statement parsed");
-	assign_asys = 0;
+	asgn_stmt_asys = 0;
 }
 /*
 *	<assignment expression>			-> AVID = <arithmetic expression> |  SVID = <string expression>
@@ -799,17 +799,10 @@ static Token* eval_rpn(void) {
 	for (i = 0, err = 0; i < sz && !err; ++i) {
 		Token exp_val;
 		tkn = (Token*)l_get(rpn_exp, i);
-		if (tkn->code > 1 && tkn->code < 7) { /* value tokens are in this range */
-			if (tkn->code > 2 || s_isempty(exp_stck)) s_push(exp_stck, tkn);
-			else {
-				/* change to literal type for easier evaluations */
-				char type = st_get_type(sym_table, tkn->attribute.vid_offset);
-				exp_val.code = (type == 'I' ? INL_T : FPL_T);
-				if (type == 'I') exp_val.attribute.int_value = sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val;
-				else exp_val.attribute.flt_value = sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val;
-				s_push(exp_stck, &exp_val);
-			}
-		} else if (tkn->code > 6 && tkn->code < 12) { /* operator tokens are in this range */
+		/* value tokens are in this range */
+		if (tkn->code > 1 && tkn->code < 7) s_push(exp_stck, tkn);
+		/* operator tokens are in this range */
+		else if (tkn->code > 6 && tkn->code < 12) {
 			Token *op1 = NULL;
 			/* pop tokens off the stack */
 			Token *op2 = (Token*)s_pop(exp_stck);
@@ -826,24 +819,30 @@ printf("In SCC_OP_T\n");
 #ifdef DEBUG
 printf("In ASS_OP_T\n");
 #endif
-					/* if assignment statement only involves one literal then update type */
-					if (assign_asys && sz == 3) {
-						char type = st_get_type(sym_table, op1->attribute.vid_offset);
-						if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
-							st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+					{
+						/* if assignment statement only involves one literal then update type */
+						if (asgn_stmt_asys && sz == 3) {
+							char type = st_get_type(sym_table, op1->attribute.vid_offset);
+							if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
+								st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+							}
+						}
+						switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
+							case 'I':
+								rval.int_val = (int)get_num_value(op2);
+								break;
+							case 'F':
+#ifdef DEBUG
+printf("Assigning to float type.\n");
+printf("rval is %f\n", (float)get_num_value(op2));
+#endif
+								rval.fpl_val = (float)get_num_value(op2);
+								break;
+							case 'S':
+								rval.str_offset = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+								break;
 						}
 					}
-					switch (st_get_type(sym_table, op1->attribute.vid_offset)) {
-						case 'I':
-							rval.int_val = (op2->code == INL_T ? op2->attribute.int_value : (int)op2->attribute.flt_value);
-							break;
-						case 'F':
-							rval.fpl_val = (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value);
-							break;
-						case 'S':
-							rval.str_offset = op2->attribute.str_offset;
-							break;
-					}		
 					st_update_value(sym_table, op1->attribute.vid_offset, rval);
 					break;
 				case ART_OP_T:
@@ -851,36 +850,80 @@ printf("In ASS_OP_T\n");
 printf("In ART_OP_T\n");
 #endif
 					/* divide by zero will break out of evaluation and print the error to console */
-					if (tkn->attribute.arr_op == DIV && !op2->attribute.int_value) {
+					if (tkn->attribute.arr_op == DIV && (op2->code == AVID_T && !sym_table.pstvr[op2->attribute.vid_offset].i_value.int_val || !op2->attribute.int_value)) {
 						printf("***CANNOT DIVIDE BY ZERO***\n");
 						err = 1;
 						break;
 					}
-					exp_val.code = op2->code == FPL_T || op1 && op1->code == FPL_T ? FPL_T : INL_T;
-					if (op1) { /* binary operation */
-						if (op1->code == FPL_T || op2->code == FPL_T) {
-							exp_val.attribute.flt_value = 	(tkn->attribute.arr_op == PLUS  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-																+ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-															 tkn->attribute.arr_op == MINUS ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-																- (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-															 tkn->attribute.arr_op == MULT  ? ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-																* (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)) :
-																							  ((op1->code == FPL_T ? op1->attribute.flt_value : (float)op1->attribute.int_value) 
-																/ (op2->code == FPL_T ? op2->attribute.flt_value : (float)op2->attribute.int_value)));
-						} else {
-							exp_val.attribute.int_value = 	(tkn->attribute.arr_op == PLUS  ? (op1->attribute.int_value + op2->attribute.int_value) :
-															 tkn->attribute.arr_op == MINUS ? (op1->attribute.int_value - op2->attribute.int_value) :
-															 tkn->attribute.arr_op == MULT  ? (op1->attribute.int_value * op2->attribute.int_value) :
-																							  (op1->attribute.int_value / op2->attribute.int_value));
+#ifdef DEBUG
+printf("op2->code is %d and op1->code is %d\n", op2->code, op1 ? op1->code : -1);
+#endif
+					exp_val.code = INL_T;
+					{
+						int int_val1, int_val2;
+						float flp_val1, flp_val2;
+						if (op2->code == AVID_T && st_get_type(sym_table, op2->attribute.vid_offset) == 'F' || op2->code == FPL_T) {
+							flp_val2 = op2->code == AVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.fpl_val : op2->attribute.flt_value;
+							exp_val.code = FPL_T;
+						} else
+							int_val2 = op2->code == AVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.int_val : op2->attribute.int_value;
+						if (op1) {
+							if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
+								flp_val1 = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+								exp_val.code = FPL_T;
+							} else {
+								if (exp_val.code == FPL_T) flp_val1 = (float)(op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value);
+								else int_val1 = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+							}
 						}
-					} else if (op2) { /* unary operation */
-						if (tkn->attribute.arr_op == UMINUS) {
-							if (op2->code == FPL_T) exp_val.attribute.flt_value = -op2->attribute.flt_value;
-							else exp_val.attribute.int_value = -op2->attribute.int_value;
-						} else {
-							if (op2->code == FPL_T) exp_val.attribute.flt_value = op2->attribute.flt_value;
-							else exp_val.attribute.int_value = op2->attribute.int_value;
+						switch (tkn->attribute.arr_op) {
+							case PLUS:
+#ifdef DEBUG
+printf("In PLUS\n");
+#endif
+								if (exp_val.code == FPL_T) exp_val.attribute.flt_value = flp_val1 + flp_val2;
+								else exp_val.attribute.int_value = int_val1 + int_val2;
+								break;
+							case MINUS:
+#ifdef DEBUG
+printf("In MINUS\n");
+#endif
+								if (exp_val.code == FPL_T) exp_val.attribute.flt_value = flp_val1 - flp_val2;
+								else exp_val.attribute.int_value = int_val1 - int_val2;
+								break;
+							case MULT:
+#ifdef DEBUG
+printf("In MULT\n");
+#endif
+								if (exp_val.code == FPL_T) exp_val.attribute.flt_value = flp_val1 * flp_val2;
+								else exp_val.attribute.int_value = int_val1 * int_val2;
+								break;
+							case DIV:
+#ifdef DEBUG
+printf("In DIV\n");
+#endif
+								if (exp_val.code == FPL_T) exp_val.attribute.flt_value = flp_val1 / flp_val2;
+								else exp_val.attribute.int_value = int_val1 / int_val2;
+								break;
+							case UPLUS:
+#ifdef DEBUG
+printf("In UPLUS\n");
+#endif
+								if (exp_val.code == FPL_T) exp_val.attribute.flt_value = flp_val2;
+								else exp_val.attribute.int_value = int_val2;
+								break;
+							case UMINUS:
+#ifdef DEBUG
+printf("In UMINUS\n");
+#endif
+								if (exp_val.code == FPL_T) exp_val.attribute.flt_value = -flp_val2;
+								else exp_val.attribute.int_value = -int_val2;
+								break;
 						}
+#ifdef DEBUG
+if (exp_val.code == FPL_T) printf("exp_val.attribute.flt_value = %f\n", exp_val.attribute.flt_value);
+else printf("exp_val.attribute.int_value = %d\n", exp_val.attribute.int_value);
+#endif
 					}			
 					break;
 				case REL_OP_T:
@@ -903,7 +946,7 @@ printf("In REL_OP_T\n");
 								exp_val.attribute.int_value = flp_val <  (float)get_num_value(op2);
 								break;
 						}
-					} else if (op1->code == AVID_T || op1->code == FPL_T) {
+					} else if (op1->code == AVID_T || op1->code == INL_T) {
 						int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
 						switch (tkn->attribute.rel_op) {
 							case EQ:
@@ -921,17 +964,22 @@ printf("In REL_OP_T\n");
 					} else {
 						int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
 						int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+						char* str1 = str_offset1 < 0 ? "" : b_setmark(str_LTBL, str_offset1);
+						char* str2 = str_offset2 < 0 ? "" : b_setmark(str_LTBL, str_offset2);
+#ifdef DEBUG
+printf("str1 is %s and str2 is %s\n", str1, str2);
+#endif
 						switch (tkn->attribute.rel_op) {
 							case EQ:
-								exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) == *b_setmark(str_LTBL, str_offset2);
+								exp_val.attribute.int_value = *str1 == *str2;
 								break;
 							case NE:
-								exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) != *b_setmark(str_LTBL, str_offset2);
+								exp_val.attribute.int_value = *str1 != *str2;
 								break;
 							case GT:
-								exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) >  *b_setmark(str_LTBL, str_offset2);
+								exp_val.attribute.int_value = *str1 >  *str2;
 							case LT:
-								exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) <  *b_setmark(str_LTBL, str_offset2);
+								exp_val.attribute.int_value = *str1 <  *str2;
 								break;
 						}
 					}

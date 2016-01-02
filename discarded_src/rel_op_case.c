@@ -253,5 +253,111 @@ if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 
 			break;
 	}
 }
-	exp_val.attribute.int_value =  (op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset)
-								== (op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset);
+
+
+
+
+switch (tkn->attribute.rel_op) {
+	case EQ:
+		if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
+			float flp_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+			exp_val.attribute.int_value = flp_val == get_num_value(op2);
+		} else if (op1->code == AVID_T || op1->code == FPL_T) {
+			int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+			exp_val.attribute.int_value = int_val == get_num_value(op2);
+		} else {
+			int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
+			int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) == *b_setmark(str_LTBL, str_offset2);
+		}
+		break;
+	case NE:
+		if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
+			float flp_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+			exp_val.attribute.int_value = flp_val != get_num_value(op2);
+		} else if (op1->code == AVID_T || op1->code == FPL_T) {
+			int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+			exp_val.attribute.int_value = int_val != get_num_value(op2);
+		} else {
+			int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
+			int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) != *b_setmark(str_LTBL, str_offset2);
+		}
+		break;
+	case GT:
+		if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
+			float flp_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+			exp_val.attribute.int_value = flp_val > get_num_value(op2);
+		} else if (op1->code == AVID_T || op1->code == FPL_T) {
+			int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+			exp_val.attribute.int_value = int_val > get_num_value(op2);
+		} else {
+			int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
+			int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) > *b_setmark(str_LTBL, str_offset2);
+		}
+	case LT:
+		if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
+			float flp_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+			exp_val.attribute.int_value = flp_val < get_num_value(op2);
+		} else if (op1->code == AVID_T || op1->code == FPL_T) {
+			int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+			exp_val.attribute.int_value = int_val < get_num_value(op2);
+		} else {
+			int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
+			int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) < *b_setmark(str_LTBL, str_offset2);
+		}
+		break;
+}
+
+
+
+
+if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
+	float flp_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+	switch (tkn->attribute.rel_op) {
+		case EQ:
+			exp_val.attribute.int_value = flp_val == (float)get_num_value(op2);
+			break;
+		case NE:
+			exp_val.attribute.int_value = flp_val != (float)get_num_value(op2);
+			break;
+		case GT:
+			exp_val.attribute.int_value = flp_val >  (float)get_num_value(op2);
+		case LT:
+			exp_val.attribute.int_value = flp_val <  (float)get_num_value(op2);
+			break;
+	}
+} else if (op1->code == AVID_T || op1->code == FPL_T) {
+	int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+	switch (tkn->attribute.rel_op) {
+		case EQ:
+			exp_val.attribute.int_value = int_val == (int)get_num_value(op2);
+			break;
+		case NE:
+			exp_val.attribute.int_value = int_val != (int)get_num_value(op2);
+			break;
+		case GT:
+			exp_val.attribute.int_value = int_val >  (int)get_num_value(op2);
+		case LT:
+			exp_val.attribute.int_value = int_val <  (int)get_num_value(op2);
+			break;
+	}
+} else {
+	int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
+	int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+	switch (tkn->attribute.rel_op) {
+		case EQ:
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) == *b_setmark(str_LTBL, str_offset2);
+			break;
+		case NE:
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) != *b_setmark(str_LTBL, str_offset2);
+			break;
+		case GT:
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) >  *b_setmark(str_LTBL, str_offset2);
+		case LT:
+			exp_val.attribute.int_value = *b_setmark(str_LTBL, str_offset1) <  *b_setmark(str_LTBL, str_offset2);
+			break;
+	}
+}
