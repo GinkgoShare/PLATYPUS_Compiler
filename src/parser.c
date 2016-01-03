@@ -41,7 +41,7 @@ static void syn_eh(int);
 static void syn_printe(void);
 static void gen_incode(char*);
 static char get_exp_type(void);
-static Token* eval_rpn(void);
+static Token eval_rpn(void);
 static int concat_str(Token* op1, Token* op2);
 
 /* grammar productions */
@@ -615,7 +615,7 @@ static void primary_string_expression(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 static void conditional_expression(void) {
-	Token * tkn;
+	Token tkn;
 	exp_asys = 1;
 	rpn_exp = l_create(10, 10, sizeof(Token));
 	operators = s_create(4, 4, sizeof(Token), 'a');
@@ -627,7 +627,7 @@ static void conditional_expression(void) {
 	if (exp_asys) {
 		tkn = eval_rpn();
 #ifdef DEBUG
-printf("Conditional expression value is %s.\n", tkn->attribute.int_value ? "true" : "false");
+printf("Conditional expression value is %s.\n", tkn.attribute.int_value ? "true" : "false");
 #endif
 		exp_asys = 0;
 	}
@@ -783,7 +783,7 @@ Algorithm: unload the remaining operators off the stack, create a new stack for
 		   encountered then pop two operands of the stack, evaluate the
 		   expression and push the value on the stack
 *******************************************************************************/
-static Token* eval_rpn(void) {
+static Token eval_rpn(void) {
 
 	/* PRE-CONDITIONS */
 	Token *tkn;
@@ -819,6 +819,7 @@ printf("In SCC_OP_T\n");
 #ifdef DEBUG
 printf("In ASS_OP_T\n");
 #endif
+					exp_val = *op2;
 					{
 						/* if assignment statement only involves one literal then update type */
 						if (asgn_stmt_asys && sz == 3) {
@@ -832,10 +833,6 @@ printf("In ASS_OP_T\n");
 								rval.int_val = (int)get_num_value(op2);
 								break;
 							case 'F':
-#ifdef DEBUG
-printf("Assigning to float type.\n");
-printf("rval is %f\n", (float)get_num_value(op2));
-#endif
 								rval.fpl_val = (float)get_num_value(op2);
 								break;
 							case 'S':
@@ -964,22 +961,22 @@ printf("In REL_OP_T\n");
 					} else {
 						int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
 						int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
-						char* str1 = str_offset1 < 0 ? "" : b_setmark(str_LTBL, str_offset1);
-						char* str2 = str_offset2 < 0 ? "" : b_setmark(str_LTBL, str_offset2);
+						int ret = strcmp(b_setmark(str_LTBL, str_offset1), b_setmark(str_LTBL, str_offset2));
 #ifdef DEBUG
-printf("str1 is %s and str2 is %s\n", str1, str2);
+printf("str1 is %s and str2 is %s return value is %d\n", b_setmark(str_LTBL, str_offset1), b_setmark(str_LTBL, str_offset2), ret);
 #endif
 						switch (tkn->attribute.rel_op) {
 							case EQ:
-								exp_val.attribute.int_value = *str1 == *str2;
+								exp_val.attribute.int_value = ret == 0;
 								break;
 							case NE:
-								exp_val.attribute.int_value = *str1 != *str2;
+								exp_val.attribute.int_value = ret != 0;
 								break;
 							case GT:
-								exp_val.attribute.int_value = *str1 >  *str2;
+								exp_val.attribute.int_value = ret > 0;
+								break;
 							case LT:
-								exp_val.attribute.int_value = *str1 <  *str2;
+								exp_val.attribute.int_value = ret < 0;
 								break;
 						}
 					}
@@ -1001,7 +998,7 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 		}	
 	} /* END EXPRESSION EVALUATION LOOP */
 
-	return (Token*)s_pop(exp_stck);
+	return *(Token*)s_pop(exp_stck);
 }
 /*******************************************************************************
 Purpose: Concatenate two strings
