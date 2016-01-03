@@ -113,6 +113,16 @@ void* q_remove(Queue* const pQD, void* elmnt) {
 	return elmnt;
 }
 /*******************************************************************************
+Purpose: Returns the current size of the queue. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Parameters: pQD is the QueueDescriptor to find the size of
+Return value: the current size of the queue
+*******************************************************************************/
+short q_size(Queue* const pQD) {
+	return (pQD == NULL) ? R_FAIL_1 : pQD->elmnt_offset;
+}
+/*******************************************************************************
 Purpose: Returns the elmnt_offset, if it is 0 then the queue is empty
 Author: Christopher JW Elliott
 History/Versions: Version 0.0.1 07/12/2015

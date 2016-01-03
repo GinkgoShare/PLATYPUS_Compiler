@@ -10,8 +10,8 @@ Function list: [
 	q_create(), q_add(), q_remove(), q_isempty(), q_reset(), q_destroy()
 ]
 *******************************************************************************/
-#ifndef STACK_H_
-#define STACK_H_
+#ifndef QUEUE_H_
+#define QUEUE_H_
 
 #include <stdio.h>
 #include <string.h>
@@ -26,14 +26,15 @@ typedef struct QueueDescriptor {
 	void* elmnts;
 	unsigned short elmnt_sz;
 	unsigned short capacity;
-	unsigned short elmnt_offset;
-	unsigned short inc_factor;
+	short elmnt_offset;
+	short inc_factor;
 	char mode;
 } Queue;
 
 Queue* q_create(short init_capacity, short inc_factor, short elmnt_sz, char mode);
 Queue* q_add(Queue* const pQD, const void* elmnt);
 void* q_remove(Queue* const pQD, void* elmnt);
+short q_size(Queue* const pQD);
 int q_isempty(Queue* const pQD);
 int q_reset(Queue* const pQD);
 void q_destroy(Queue* const pQD);

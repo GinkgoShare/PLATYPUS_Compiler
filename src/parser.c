@@ -11,7 +11,7 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #include "parser.h"
 
 #define DEBUG
-/*#undef DEBUG*/
+#undef DEBUG
 
 #define get_num_value(op) (op->code == AVID_T && st_get_type(sym_table, op->attribute.vid_offset) == 'F' ? \
 						  sym_table.pstvr[op->attribute.vid_offset].i_value.fpl_val : \
@@ -30,7 +30,7 @@ static Buffer* sc_buf;
 static Token lookahead;
 static InitialValue rval;
 static Stack* operators;
-static List* rpn_exp;
+static Queue* rpn_exp;
 
 int synerrno;
 int asgn_stmt_asys, exp_asys, unry_asys;
@@ -114,7 +114,7 @@ static void match(int pr_token_code, int pr_token_attribute) {
 						while (!s_isempty(operators)) {
 							Token* tkn = (Token*)s_pop(operators);
 							if (tkn->code == REL_OP_T || lookahead.code == LOG_OP_T 
-							&& (tkn->attribute.log_op == AND || lookahead.attribute.log_op == OR)) l_add(rpn_exp, tkn);
+							&& (tkn->attribute.log_op == AND || lookahead.attribute.log_op == OR)) q_add(rpn_exp, tkn);
 							else {
 								s_push(operators, tkn);
 								break;
@@ -138,14 +138,14 @@ static void match(int pr_token_code, int pr_token_attribute) {
 								Token* tkn = (Token*)s_pop(operators);
 								/* MULT and DIV have highest order of precedence(oop) so if top of stack is 
 								already at highest oop then add popped token to rpn_exp list */
-								if (tkn->attribute.arr_op == MULT || tkn->attribute.arr_op == DIV) l_add(rpn_exp, tkn);
+								if (tkn->attribute.arr_op == MULT || tkn->attribute.arr_op == DIV) q_add(rpn_exp, tkn);
 								/* ASS_OP_T and LPR_T are lowest oop and if the lookahead token attribute is 
 								MULT or DIV then it is higher oop so continue to push to stack */
 								else if (tkn->code == ASS_OP_T || tkn->code == LPR_T 
 									|| lookahead.attribute.arr_op == MULT || lookahead.attribute.arr_op == DIV) {
 									s_push(operators, tkn);
 									break;
-								} else l_add(rpn_exp, tkn);
+								} else q_add(rpn_exp, tkn);
 							}
 						}
 						s_push(operators, &lookahead);
@@ -158,14 +158,14 @@ static void match(int pr_token_code, int pr_token_attribute) {
 				if (exp_asys) {
 					Token* tkn;
 					for (tkn = (Token*)s_pop(operators); tkn->code != LPR_T; tkn = (Token*)s_pop(operators))
-						l_add(rpn_exp, tkn);
+						q_add(rpn_exp, tkn);
 				}
 				break;
 			case SCC_OP_T:
 				if (exp_asys) {
 					while (!s_isempty(operators)) {
 						Token* tkn = (Token*)s_pop(operators);
-						if (tkn->code == SCC_OP_T) l_add(rpn_exp, tkn);
+						if (tkn->code == SCC_OP_T) q_add(rpn_exp, tkn);
 						else {
 							s_push(operators, tkn);
 							break;
@@ -175,7 +175,7 @@ static void match(int pr_token_code, int pr_token_attribute) {
 				}
 				break;
 			case AVID_T: case STR_T: case FPL_T: case INL_T: case SVID_T:
-				if (exp_asys) l_add(rpn_exp, &lookahead);
+				if (exp_asys) q_add(rpn_exp, &lookahead);
 				break;
 			case ASS_OP_T: case LPR_T:
 				/* this grammar cannot have nested assignments so it is safe to 
@@ -380,7 +380,7 @@ static void assignment_statement(void) {
 */
 static void assignment_expression(void) {
 	exp_asys = 1;
-	rpn_exp = l_create(10, 10, sizeof(Token));
+	rpn_exp = q_create(10, 10, sizeof(Token), 'a');
 	operators = s_create(4, 4, sizeof(Token), 'a');
 
 	if (lookahead.code == AVID_T) {
@@ -400,7 +400,7 @@ static void assignment_expression(void) {
 	}
 
 	s_destroy(operators);
-	l_destroy(rpn_exp);
+	q_destroy(rpn_exp);
 }
 /*
 *	<selection statement>			-> IF ( <conditional expression> ) THEN <opt statments>
@@ -617,7 +617,7 @@ static void primary_string_expression(void) {
 static void conditional_expression(void) {
 	Token tkn;
 	exp_asys = 1;
-	rpn_exp = l_create(10, 10, sizeof(Token));
+	rpn_exp = q_create(10, 10, sizeof(Token), 'a');
 	operators = s_create(4, 4, sizeof(Token), 'a');
 
 	logical_or_expression();
@@ -633,7 +633,7 @@ printf("Conditional expression value is %s.\n", tkn.attribute.int_value ? "true"
 	}
 
 	s_destroy(operators);
-	l_destroy(rpn_exp);
+	q_destroy(rpn_exp);
 }
 /*
 *	<logical OR expression>			-> <logical AND expression> <logical OR expression p>
@@ -774,7 +774,7 @@ Purpose: Evaluate an expression in reverse polish notation (RPN).
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 30/12/2015
 Called functions: [ 
-	s_isempty(), l_add(), l_size(), s_create(), l_get(), s_pop(), printf(),
+	s_isempty(), q_add(), l_size(), s_create(), q_remove(), s_pop(), printf(),
 	s_push(), st_get_type(), st_get_record(), st_update_value()
 ]
 Algorithm: unload the remaining operators off the stack, create a new stack for
@@ -787,18 +787,18 @@ static Token eval_rpn(void) {
 
 	/* PRE-CONDITIONS */
 	Token *tkn;
-	int i, sz, err;
+	int sz, err = 0;
 	Stack* exp_stck;
 	/* unload remaining operators off stack to expression list */
-	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
-	sz = l_size(rpn_exp);
+	while (!s_isempty(operators)) q_add(rpn_exp, s_pop(operators));
+	sz = q_size(rpn_exp);
 	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
 	/* END PRE-CONDITIONS */
 
 	/* EXPRESSION EVALUATION LOOP */
-	for (i = 0, err = 0; i < sz && !err; ++i) {
+	while (!q_isempty(rpn_exp) && !err) {
 		Token exp_val;
-		tkn = (Token*)l_get(rpn_exp, i);
+		tkn = (Token*)q_remove(rpn_exp, &exp_val);
 		/* value tokens are in this range */
 		if (tkn->code > 1 && tkn->code < 7) s_push(exp_stck, tkn);
 		/* operator tokens are in this range */
@@ -961,7 +961,9 @@ printf("In REL_OP_T\n");
 					} else {
 						int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
 						int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
-						int ret = strcmp(b_setmark(str_LTBL, str_offset1), b_setmark(str_LTBL, str_offset2));
+						char *str1 = str_offset1 < 0 ? "" : b_setmark(str_LTBL, str_offset1);
+						char *str2 = str_offset2 < 0 ? "" : b_setmark(str_LTBL, str_offset2);
+						int ret = strcmp(str1, str2);
 #ifdef DEBUG
 printf("str1 is %s and str2 is %s return value is %d\n", b_setmark(str_LTBL, str_offset1), b_setmark(str_LTBL, str_offset2), ret);
 #endif
