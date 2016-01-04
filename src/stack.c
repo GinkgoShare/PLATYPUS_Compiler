@@ -74,7 +74,7 @@ Algorithm: check if stack is at capacity and allocate more space if necessary,
 pStack s_push(pStack const pSD, const void* elmnt) {
 	void* pLoc; 
 	void *dest_addr;
-	short new_capacity;
+	int new_capacity;
 	if (!pSD && pSD->capacity == USHRT_MAX) return NULL;
 	#ifdef DEBUG
 	printf("Token code in s_push is %d\n", ((Token*)elmnt)->code);

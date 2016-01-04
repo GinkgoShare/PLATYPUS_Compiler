@@ -74,7 +74,7 @@ Algorithm: check if queue is at capacity and allocate more space if necessary,
 Queue* q_add(Queue* const pQD, const void* elmnt) {
 	void* pLoc; 
 	void *dest_addr;
-	short new_capacity;
+	int new_capacity;
 	if (!pQD && pQD->capacity == USHRT_MAX) return NULL;
 	#ifdef DEBUG
 	printf("Token code in s_push is %d\n", ((Token*)elmnt)->code);
@@ -119,7 +119,7 @@ History/Versions: Version 0.0.1 29/12/2015
 Parameters: pQD is the QueueDescriptor to find the size of
 Return value: the current size of the queue
 *******************************************************************************/
-short q_size(Queue* const pQD) {
+int q_size(Queue* const pQD) {
 	return (pQD == NULL) ? R_FAIL_1 : pQD->elmnt_offset;
 }
 /*******************************************************************************

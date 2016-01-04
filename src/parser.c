@@ -11,7 +11,7 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #include "parser.h"
 
 #define DEBUG
-#undef DEBUG
+/*#undef DEBUG*/
 
 #define get_num_value(op) (op->code == AVID_T && st_get_type(sym_table, op->attribute.vid_offset) == 'F' ? \
 						  sym_table.pstvr[op->attribute.vid_offset].i_value.fpl_val : \
@@ -27,12 +27,13 @@ extern char * kw_table[];
 extern Token mlwpar_next_token(Buffer * sc_buf);
 
 static Buffer* sc_buf;
+static Token expr_val;
 static Token lookahead;
 static InitialValue rval;
 static Stack* operators;
-static Queue* rpn_exp;
+static List* rpn_exp;
 
-int synerrno;
+int synerrno, execute;
 int asgn_stmt_asys, exp_asys, unry_asys;
 
 /* static function declarations */
@@ -41,7 +42,7 @@ static void syn_eh(int);
 static void syn_printe(void);
 static void gen_incode(char*);
 static char get_exp_type(void);
-static Token eval_rpn(void);
+static Token evaluate(List* rpn_exp);
 static int concat_str(Token* op1, Token* op2);
 
 /* grammar productions */
@@ -85,11 +86,18 @@ static void primary_s_relational_expression_p(void);
 Author: Sv.Ranev
 */
 void parser(Buffer * in_buf) {
+	execute = 1;
 	sc_buf = in_buf;
 	lookahead = mlwpar_next_token(sc_buf);
 	asgn_stmt_asys = exp_asys = unry_asys = 0;
+	rpn_exp = l_create(10, 10, sizeof(Token));
+	operators = s_create(10, 10, sizeof(Token), 'a');
+
 	program(); match(SEOF_T, NO_ATTR);
 	gen_incode("PLATY: Source file parsed");
+
+	s_destroy(operators);
+	l_destroy(rpn_exp);
 }
 
 /*******************************************************************************
@@ -105,16 +113,20 @@ static void match(int pr_token_code, int pr_token_attribute) {
 		if (lookahead.code == SEOF_T) return;
 		switch(pr_token_code) {
 			case KW_T:
-				if (lookahead.attribute.kwt_idx == pr_token_attribute) break;
+				if (lookahead.attribute.kwt_idx == pr_token_attribute) {
+					if (lookahead.attribute.kwt_idx == OUTPUT || lookahead.attribute.kwt_idx == INPUT)
+						l_add(rpn_exp, &lookahead);
+					break;
+				}
 				syn_eh(pr_token_code); return;
 			case LOG_OP_T: case REL_OP_T:
 				if (pr_token_code == LOG_OP_T && lookahead.attribute.log_op == pr_token_attribute 
 					|| pr_token_code == REL_OP_T && lookahead.attribute.rel_op == pr_token_attribute) {
-					if (exp_asys) {
+					if (execute) {
 						while (!s_isempty(operators)) {
 							Token* tkn = (Token*)s_pop(operators);
 							if (tkn->code == REL_OP_T || lookahead.code == LOG_OP_T 
-							&& (tkn->attribute.log_op == AND || lookahead.attribute.log_op == OR)) q_add(rpn_exp, tkn);
+							&& (tkn->attribute.log_op == AND || lookahead.attribute.log_op == OR)) l_add(rpn_exp, tkn);
 							else {
 								s_push(operators, tkn);
 								break;
@@ -128,7 +140,7 @@ static void match(int pr_token_code, int pr_token_attribute) {
 				return;
 			case ART_OP_T:
 				if (lookahead.attribute.arr_op == pr_token_attribute) {
-					if (exp_asys) {
+					if (execute) {
 						/* grammar only allows unary operators in single expressions so no need to check precedence */
 						if (unry_asys) {
 							lookahead.attribute.arr_op = lookahead.attribute.arr_op == MINUS ? UMINUS : UPLUS;
@@ -138,14 +150,14 @@ static void match(int pr_token_code, int pr_token_attribute) {
 								Token* tkn = (Token*)s_pop(operators);
 								/* MULT and DIV have highest order of precedence(oop) so if top of stack is 
 								already at highest oop then add popped token to rpn_exp list */
-								if (tkn->attribute.arr_op == MULT || tkn->attribute.arr_op == DIV) q_add(rpn_exp, tkn);
+								if (tkn->attribute.arr_op == MULT || tkn->attribute.arr_op == DIV) l_add(rpn_exp, tkn);
 								/* ASS_OP_T and LPR_T are lowest oop and if the lookahead token attribute is 
 								MULT or DIV then it is higher oop so continue to push to stack */
 								else if (tkn->code == ASS_OP_T || tkn->code == LPR_T 
 									|| lookahead.attribute.arr_op == MULT || lookahead.attribute.arr_op == DIV) {
 									s_push(operators, tkn);
 									break;
-								} else q_add(rpn_exp, tkn);
+								} else l_add(rpn_exp, tkn);
 							}
 						}
 						s_push(operators, &lookahead);
@@ -155,17 +167,17 @@ static void match(int pr_token_code, int pr_token_attribute) {
 				syn_eh(pr_token_code);
 				return;
 			case RPR_T: /* add operators to the rpn_exp until we reach the previous left parenthesis */
-				if (exp_asys) {
+				if (execute && !s_isempty(operators)) {
 					Token* tkn;
 					for (tkn = (Token*)s_pop(operators); tkn->code != LPR_T; tkn = (Token*)s_pop(operators))
-						q_add(rpn_exp, tkn);
+						l_add(rpn_exp, tkn);
 				}
 				break;
 			case SCC_OP_T:
-				if (exp_asys) {
+				if (execute) {
 					while (!s_isempty(operators)) {
 						Token* tkn = (Token*)s_pop(operators);
-						if (tkn->code == SCC_OP_T) q_add(rpn_exp, tkn);
+						if (tkn->code == SCC_OP_T) l_add(rpn_exp, tkn);
 						else {
 							s_push(operators, tkn);
 							break;
@@ -175,12 +187,12 @@ static void match(int pr_token_code, int pr_token_attribute) {
 				}
 				break;
 			case AVID_T: case STR_T: case FPL_T: case INL_T: case SVID_T:
-				if (exp_asys) q_add(rpn_exp, &lookahead);
+				if (execute) l_add(rpn_exp, &lookahead);
 				break;
 			case ASS_OP_T: case LPR_T:
 				/* this grammar cannot have nested assignments so it is safe to 
 				assume we can push to the stack without meeting a condition */
-				if (exp_asys) s_push(operators, &lookahead);
+				if (execute) s_push(operators, &lookahead);
 				break;
 		}
 		if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
@@ -213,7 +225,7 @@ Author: Sv.Ranev
 */
 static void syn_printe(void) {
 	Token t = lookahead;
-	asgn_stmt_asys = exp_asys = 0;
+	asgn_stmt_asys = exp_asys = execute = 0;
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
 	printf("*****  Token code:%3d Attribute: ",t.code);
 	switch(t.code){
@@ -279,7 +291,7 @@ static void syn_printe(void) {
 
 /*
 Purpose: Used by production functions to print out a string argument
-Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
+Author: Christopher Elliott, 040 570 022
 History/Versions: 1.0 / 11 December 2015
 Called functions: none
 Parameters: char* string
@@ -371,6 +383,12 @@ static void assignment_statement(void) {
 	asgn_stmt_asys = 1;
 	assignment_expression(); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: Assignment statement parsed");
+
+	/* evaluate RPN if stmt is parsed correctly */
+	if (asgn_stmt_asys && execute) {
+		expr_val = evaluate(rpn_exp);
+		l_reset(rpn_exp);
+	}
 	asgn_stmt_asys = 0;
 }
 /*
@@ -379,10 +397,6 @@ static void assignment_statement(void) {
 *   Authors: Christopher Elliott, 040 570 022
 */
 static void assignment_expression(void) {
-	exp_asys = 1;
-	rpn_exp = q_create(10, 10, sizeof(Token), 'a');
-	operators = s_create(4, 4, sizeof(Token), 'a');
-
 	if (lookahead.code == AVID_T) {
 		match(AVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); arithmetic_expression();
 		gen_incode("PLATY: Assignment expression (arithmetic) parsed");		
@@ -392,15 +406,10 @@ static void assignment_expression(void) {
 	} else {
 		syn_printe();
 	}
-
-	/* evaluate RPN */
-	if (exp_asys) {
-		eval_rpn();
-		exp_asys = 0;
+	if (!asgn_stmt_asys && execute) {
+		expr_val = evaluate(rpn_exp);
+		l_reset(rpn_exp);
 	}
-
-	s_destroy(operators);
-	q_destroy(rpn_exp);
 }
 /*
 *	<selection statement>			-> IF ( <conditional expression> ) THEN <opt statments>
@@ -409,10 +418,17 @@ static void assignment_expression(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 static void selection_statement(void) {
-	match(KW_T, IF); match(LPR_T, NO_ATTR); conditional_expression(); 
-	match(RPR_T, NO_ATTR); match(KW_T, THEN); opt_statements(); match(KW_T, ELSE); 
-	match(LBR_T, NO_ATTR); opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
+	int cndtnl_val;
+	int execute_chain = execute;
+	match(KW_T, IF); match(LPR_T, NO_ATTR); conditional_expression(); match(RPR_T, NO_ATTR);
+	cndtnl_val = expr_val.attribute.int_value;
+	printf("Conditional value %d\n", cndtnl_val);
+	execute = cndtnl_val ? 1 : 0;
+	match(KW_T, THEN); opt_statements(); 
+	execute = !cndtnl_val ? 1 : 0;
+	match(KW_T, ELSE); match(LBR_T, NO_ATTR); opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: IF statement parsed");
+	execute = execute_chain;
 }
 /*
 *	<iteration statement> 			-> USING ( <assignment expression> , <conditional expression> , <assignment_expression> )
@@ -423,10 +439,19 @@ static void selection_statement(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 static void iteration_statement(void) {
-	match(KW_T, USING); match(LPR_T, NO_ATTR); assignment_expression(); match(COM_T, NO_ATTR);
-	conditional_expression(); match(COM_T, NO_ATTR); assignment_expression(); match(RPR_T, NO_ATTR);
+	int cndtnl_val;
+	int itrtn_stmt = 1;
+	int execute_chain = execute;
+	match(KW_T, USING); match(LPR_T, NO_ATTR); 
+	assignment_expression(); match(COM_T, NO_ATTR);
+	conditional_expression(); 
+	cndtnl_val = expr_val.attribute.int_value;
+	execute = cndtnl_val ? 1 : 0;
+	match(COM_T, NO_ATTR); assignment_expression(); match(RPR_T, NO_ATTR);
 	match(KW_T, REPEAT); match(LBR_T, NO_ATTR);  opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: USING statement parsed");
+	execute = execute_chain;
+	itrtn_stmt = 0;
 }
 /*
 *	<input statement>			-> INPUT ( <variable list> ) ;
@@ -436,6 +461,11 @@ static void iteration_statement(void) {
 static void input_statement(void) {
 	match(KW_T, INPUT); match(LPR_T, NO_ATTR); variable_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: INPUT statement parsed");
+	/* evaluate RPN */
+	if (execute) {
+		expr_val = evaluate(rpn_exp);
+		l_reset(rpn_exp);
+	}
 }
 /*
 *	<variable list>			-> <variable identifier> <variable list p>
@@ -474,6 +504,11 @@ static void variable_identifier(void) {
 static void output_statement(void) {
 	match(KW_T, OUTPUT); match(LPR_T, NO_ATTR); output_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	gen_incode("PLATY: OUTPUT statement parsed");
+	/* evaluate RPN */
+	if (execute) {
+		expr_val = evaluate(rpn_exp);
+		l_reset(rpn_exp);
+	}
 }
 /*
 *	<output list>			-> <variable list> | STR_T | e
@@ -615,25 +650,17 @@ static void primary_string_expression(void) {
 *   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
 */
 static void conditional_expression(void) {
-	Token tkn;
-	exp_asys = 1;
-	rpn_exp = q_create(10, 10, sizeof(Token), 'a');
-	operators = s_create(4, 4, sizeof(Token), 'a');
-
 	logical_or_expression();
 	gen_incode("PLATY: Conditional expression parsed");
 
 	/* evaluate RPN */
-	if (exp_asys) {
-		tkn = eval_rpn();
+	if (execute) {
+		expr_val = evaluate(rpn_exp);
+		l_reset(rpn_exp);
 #ifdef DEBUG
-printf("Conditional expression value is %s.\n", tkn.attribute.int_value ? "true" : "false");
-#endif
-		exp_asys = 0;
+printf("Conditional expression value is %s.\n", expr_val.attribute.int_value ? "true" : "false");
+#endif		
 	}
-
-	s_destroy(operators);
-	q_destroy(rpn_exp);
 }
 /*
 *	<logical OR expression>			-> <logical AND expression> <logical OR expression p>
@@ -770,7 +797,8 @@ static void primary_s_relational_expression_p(void) {
 	syn_printe();
 }
 /*******************************************************************************
-Purpose: Evaluate an expression in reverse polish notation (RPN). 
+Purpose: Evaluate an expression. Arithmetic expressions are in reverse polish 
+		 notation (RPN) at this point. 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 30/12/2015
 Called functions: [ 
@@ -783,22 +811,22 @@ Algorithm: unload the remaining operators off the stack, create a new stack for
 		   encountered then pop two operands of the stack, evaluate the
 		   expression and push the value on the stack
 *******************************************************************************/
-static Token eval_rpn(void) {
+static Token evaluate(List* rpn_exp) {
 
 	/* PRE-CONDITIONS */
+	int sz, i;
 	Token *tkn;
-	int sz, err = 0;
 	Stack* exp_stck;
 	/* unload remaining operators off stack to expression list */
-	while (!s_isempty(operators)) q_add(rpn_exp, s_pop(operators));
-	sz = q_size(rpn_exp);
+	while (!s_isempty(operators)) l_add(rpn_exp, s_pop(operators));
+	sz = l_size(rpn_exp);
 	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
 	/* END PRE-CONDITIONS */
 
 	/* EXPRESSION EVALUATION LOOP */
-	while (!q_isempty(rpn_exp) && !err) {
+	for (i=0; i < sz; ++i) {
 		Token exp_val;
-		tkn = (Token*)q_remove(rpn_exp, &exp_val);
+		tkn = (Token*)l_get(rpn_exp, i);
 		/* value tokens are in this range */
 		if (tkn->code > 1 && tkn->code < 7) s_push(exp_stck, tkn);
 		/* operator tokens are in this range */
@@ -849,8 +877,16 @@ printf("In ART_OP_T\n");
 					/* divide by zero will break out of evaluation and print the error to console */
 					if (tkn->attribute.arr_op == DIV && (op2->code == AVID_T && !sym_table.pstvr[op2->attribute.vid_offset].i_value.int_val || !op2->attribute.int_value)) {
 						printf("***CANNOT DIVIDE BY ZERO***\n");
-						err = 1;
-						break;
+#ifdef DEBUG
+printf("List size is %d\n", l_size(rpn_exp));
+#endif
+						l_reset(rpn_exp);
+						exp_val.code = ERR_T;
+						strcpy(exp_val.attribute.err_lex, "RUN TIME ERROR");
+#ifdef DEBUG
+printf("List size is %d\n", l_size(rpn_exp));
+#endif
+						return exp_val;
 					}
 #ifdef DEBUG
 printf("op2->code is %d and op1->code is %d\n", op2->code, op1 ? op1->code : -1);
@@ -930,6 +966,9 @@ printf("In REL_OP_T\n");
 					exp_val.code = INL_T;
 					if (op1->code == AVID_T && st_get_type(sym_table, op1->attribute.vid_offset) == 'F' || op1->code == FPL_T) {
 						float flp_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.fpl_val : op1->attribute.flt_value;
+#ifdef DEBUG
+printf("flp_val1 is %f and flp_val2 is %f return value is %d\n", flp_val, (float)get_num_value(op2), flp_val > (float)get_num_value(op2));
+#endif
 						switch (tkn->attribute.rel_op) {
 							case EQ:
 								exp_val.attribute.int_value = flp_val == (float)get_num_value(op2);
@@ -939,12 +978,16 @@ printf("In REL_OP_T\n");
 								break;
 							case GT:
 								exp_val.attribute.int_value = flp_val >  (float)get_num_value(op2);
+								break;
 							case LT:
 								exp_val.attribute.int_value = flp_val <  (float)get_num_value(op2);
 								break;
 						}
 					} else if (op1->code == AVID_T || op1->code == INL_T) {
 						int int_val = op1->code == AVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.int_val : op1->attribute.int_value;
+#ifdef DEBUG
+printf("int_val1 is %d and int_val2 is %d return value is %d\n", int_val, (int)get_num_value(op2), int_val > (int)get_num_value(op2));
+#endif
 						switch (tkn->attribute.rel_op) {
 							case EQ:
 								exp_val.attribute.int_value = int_val == (int)get_num_value(op2);
@@ -954,6 +997,7 @@ printf("In REL_OP_T\n");
 								break;
 							case GT:
 								exp_val.attribute.int_value = int_val >  (int)get_num_value(op2);
+								break;
 							case LT:
 								exp_val.attribute.int_value = int_val <  (int)get_num_value(op2);
 								break;
@@ -996,6 +1040,53 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 						exp_val.attribute.int_value = (op1->attribute.int_value ? op1->attribute.int_value : op2->attribute.int_value);
 					break;
 			}
+			s_push(exp_stck, &exp_val);
+
+		} else if (tkn->code == KW_T) {
+			if (tkn->attribute.kwt_idx == OUTPUT) {
+				if (l_isempty(rpn_exp)) printf("\n");
+				else {
+					/* iterate through remaining tokens */
+					for (; i < sz; ++i) {
+						tkn = (Token*)l_get(rpn_exp, i);
+						switch (tkn->code) {
+							case AVID_T:
+								if (st_get_type(sym_table, tkn->attribute.vid_offset) == 'F')
+									printf(i == (sz-1) ? "%f" : "%f, ", sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val);
+								else printf(i == (sz-1) ? "%d" : "%d, ", sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val);
+								break;
+							case SVID_T:
+								printf(i == (sz-1) ? "%s" : "%s, ", b_setmark(str_LTBL, sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset));
+								break;
+							case STR_T:
+								printf("%s", tkn->attribute.str_offset);
+								break;
+						}
+					}
+				}
+			} else if (tkn->attribute.kwt_idx == INPUT) {
+				for (; i < sz; ++i) {
+					tkn = (Token*)l_get(rpn_exp, i);
+					if (tkn->code == AVID_T) {
+						if (st_get_type(sym_table, tkn->attribute.vid_offset) == 'F') scanf("%f", &sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val);
+						else scanf("%d", &sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val);
+						/*b_addc(format, st_get_type(sym_table, tkn->attribute.vid_offset) == 'F' ? 'f' : 'd');
+						if (i == (list_sz-1)) b_addc(format, ',');*/
+					} else if (tkn->code == SVID_T) {
+						sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset = b_size(str_LTBL);
+						scanf("%s", b_setmark(str_LTBL, sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset));
+						while (getchar() != '\n') ; /* flush input stream */
+						/*if (i == (list_sz-1)) {
+							b_addc(format, 's');
+							continue;
+						}
+						b_addc(format, '['); b_addc(format, '^'); b_addc(format, ','); b_addc(format, ']');*/
+					}
+				}
+
+			}
+			exp_val.code = INL_T;
+			exp_val.attribute.int_value = 1;
 			s_push(exp_stck, &exp_val);
 		}	
 	} /* END EXPRESSION EVALUATION LOOP */

@@ -64,14 +64,12 @@ Algorithm: Check if the list is at its maximum capacity, check if the list is at
 		   storage, add element to the end of the list
 *******************************************************************************/
 void* l_add(List* const pLD, const void* elmnt) {
+	int new_capacity;
 	void* pLoc; void* dest_addr;
-	short new_capacity;
 	if (!pLD && pLD->capacity == INT_MAX) return NULL;
-	#ifdef DEBUG
-	printf("Token->code in l_add() = %d;\n", ((Token*)elmnt)->code);
-	#endif
+
 	if((pLD->elmnt_offset * pLD->elmnt_sz) == pLD->capacity) {
-		new_capacity = pLD->capacity + (pLD->inc_factor * pLD->elmnt_sz);
+		new_capacity = pLD->capacity + pLD->inc_factor * pLD->elmnt_sz;
 		if (new_capacity < 0) return NULL;
 		pLoc = realloc(pLD->elmnts, new_capacity);
 		if (pLoc == NULL) return NULL;
@@ -95,7 +93,7 @@ Return value: returns the address at the specified index.
 *******************************************************************************/
 void* l_get(List* const pLD, const int index) {
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
-	return (char*)pLD->elmnts + (index * pLD->elmnt_sz);
+	return (char*)pLD->elmnts + index * pLD->elmnt_sz;
 }
 /*******************************************************************************
 Purpose: Set's an already specified index with a new element. 
@@ -110,7 +108,7 @@ Algorithm: Make sure the specified index is within a valid range, store element
 void* l_set(List* const pLD, const int index, const void* elmnt) {
 	void *dest_addr;
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
-	dest_addr = (char*)pLD->elmnts + (index * pLD->elmnt_sz);
+	dest_addr = (char*)pLD->elmnts + index * pLD->elmnt_sz;
 	memcpy(dest_addr, elmnt, pLD->elmnt_sz);
 	return pLD;
 }
@@ -125,14 +123,14 @@ Return value: the adjusted size of the list
 Algorithm: Make sure the specified index is within a valid range, shift the
 		   following elements to the removed index position
 *******************************************************************************/
-int l_remove(List* const pLD, const int index) {
-	void* dest_addr; void* fllwng_elmnts;
+void* l_remove(List* const pLD, const int index, void* elmnt) {
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
+	pLD->elmnt_offset--;
+	/* copy element */
+	memcpy(elmnt, (char*)pLD->elmnts + index * pLD->elmnt_sz, pLD->elmnt_sz);
 	/* shift remaining elements */
-	dest_addr = (char*)pLD->elmnts + (index * pLD->elmnt_sz);
-	fllwng_elmnts = (char*)pLD->elmnts + ((index+1) * (pLD->elmnt_sz * (pLD->elmnt_offset - (index-1))));
-	memcpy(dest_addr, fllwng_elmnts, pLD->elmnt_sz);
-	return --(pLD->elmnt_offset);
+	memcpy((char*)pLD->elmnts + index * pLD->elmnt_sz, (char*)pLD->elmnts + (index+1) * pLD->elmnt_sz, (pLD->elmnt_offset - index) * pLD->elmnt_sz);
+	return elmnt;
 }
 /*******************************************************************************
 Purpose: Returns the current size of the list. 
@@ -142,7 +140,7 @@ Parameters: pLD is the ListDescriptor to find the size of
 Return value: the current size of the list
 *******************************************************************************/
 int l_size(List* const pLD) {
-	return (pLD == NULL) ? R_FAIL_1 : pLD->elmnt_offset;
+	return pLD == NULL ? R_FAIL_1 : pLD->elmnt_offset;
 }
 /*******************************************************************************
 Purpose: Returns true if the list is currently empty. 
@@ -151,8 +149,8 @@ History/Versions: Version 0.0.1 29/12/2015
 Parameters: pLD is the ListDescriptor to query
 Return value: true if the list is currently empty or null, false if otherwise
 *******************************************************************************/
-int l_isEmpty(List* const pLD) {
-	return (pLD == NULL) ? R_FAIL_1 : (pLD->elmnt_offset == 0);
+int l_isempty(List* const pLD) {
+	return pLD == NULL ? R_FAIL_1 : (pLD->elmnt_offset == 0);
 }
 /*******************************************************************************
 Purpose: resize the list to its current size plus one
@@ -168,7 +166,7 @@ Algorithm: set a temporary variable to reallocate new memory, try to reallocate
 *******************************************************************************/
 void* l_pack(List* const pLD) {
 	void* pLoc;
-	short new_capacity;
+	int new_capacity;
 	if (pLD == NULL || pLD->capacity == INT_MAX) return NULL;
 
 	if (pLD->capacity == ((pLD->elmnt_offset+1) * pLD->elmnt_sz)) return pLD; /* list is already packed */
