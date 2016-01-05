@@ -18,7 +18,7 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #include "stable.h"
 
 #define DEBUG
-#undef DEBUG
+/*#undef DEBUG*/
 
 extern STD sym_table; /* global sym_table variable */
 

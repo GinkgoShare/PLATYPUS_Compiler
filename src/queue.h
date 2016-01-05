@@ -24,9 +24,9 @@ Function list: [
 
 typedef struct QueueDescriptor {
 	void* elmnts;
-	unsigned short elmnt_sz;
-	unsigned short capacity;
-	short elmnt_offset;
+	int capacity;
+	int elmnt_offset;
+	short elmnt_sz;
 	short inc_factor;
 	char mode;
 } Queue;
@@ -34,7 +34,7 @@ typedef struct QueueDescriptor {
 Queue* q_create(short init_capacity, short inc_factor, short elmnt_sz, char mode);
 Queue* q_add(Queue* const pQD, const void* elmnt);
 void* q_remove(Queue* const pQD, void* elmnt);
-short q_size(Queue* const pQD);
+int q_size(Queue* const pQD);
 int q_isempty(Queue* const pQD);
 int q_reset(Queue* const pQD);
 void q_destroy(Queue* const pQD);

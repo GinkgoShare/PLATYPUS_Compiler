@@ -24,9 +24,9 @@ Function list: [
 
 typedef struct StackDescriptor {
 	void* elmnts;
+	int capacity;
+	int elmnt_offset;
 	unsigned short elmnt_sz;
-	unsigned short capacity;
-	unsigned short elmnt_offset;
 	unsigned short inc_factor;
 	char mode;
 } Stack, *pStack;

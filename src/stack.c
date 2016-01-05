@@ -70,7 +70,7 @@ Algorithm: check if stack is at capacity and allocate more space if necessary,
 pStack s_push(pStack const pSD, const void* elmnt) {
 	void* pLoc; 
 	void *dest_addr;
-	short new_capacity;
+	int new_capacity;
 	if (!pSD && pSD->capacity == USHRT_MAX) return NULL;
 
 	if((pSD->elmnt_offset * pSD->elmnt_sz) == pSD->capacity) {

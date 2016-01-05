@@ -27,6 +27,7 @@ extern char * kw_table[];
 extern Token mlwpar_next_token(Buffer * sc_buf);
 
 static Buffer* sc_buf;
+static Token expr_val;
 static Token lookahead;
 static Token exp_value;
 static Stack* operators;
@@ -85,8 +86,8 @@ static void primary_s_relational_expression_p(void);
 Author: Sv.Ranev
 */
 void parser(Buffer * in_buf) {
-	sc_buf = in_buf;
 	execute = 1;
+	sc_buf = in_buf;
 	asgn_stmt_asys = unry_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	iterable = l_create(10, 10, sizeof(Token));
@@ -282,7 +283,7 @@ static void syn_printe(void) {
 
 /*
 Purpose: Used by production functions to print out a string argument
-Author: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
+Author: Christopher Elliott, 040 570 022
 History/Versions: 1.0 / 11 December 2015
 Called functions: none
 Parameters: char* string
@@ -401,7 +402,7 @@ static void assignment_expression(void) {
 *	<selection statement>			-> IF ( <conditional expression> ) THEN <opt statments>
 *									   ELSE { <opt statements> } ;
 *	FIRST(<selection statement>)	=  { IF }
-*   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
+*   Authors: Christopher Elliott, 040 570 022
 */
 static void selection_statement(void) {
 	int execute_chain = execute;
@@ -420,7 +421,7 @@ static void selection_statement(void) {
 *			   							   <opt statements>
 *									   };
 *	FIRST(<iteration statement>)	=  { USING }
-*   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
+*   Authors: Christopher Elliott, 040 570 022
 */
 static void iteration_statement(void) {
 	List *cond_exp, *assgn_exp;
@@ -803,7 +804,8 @@ static void primary_s_relational_expression_p(void) {
 	syn_printe();
 }
 /*******************************************************************************
-Purpose: Evaluate an expression in reverse polish notation (RPN). 
+Purpose: Evaluate an expression. Arithmetic expressions are in reverse polish 
+		 notation (RPN) at this point. 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 30/12/2015
 Called functions: [ 
