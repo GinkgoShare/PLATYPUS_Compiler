@@ -12,11 +12,11 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #define PARSER_H_
 
 #include <stdlib.h>
-#include "buffer.h"
 #include "token.h"
-#include "stable.h"
 #include "stack.h"
-#include "queue.h"
+#include "list.h"
+#include "stable.h"
+#include "buffer.h"
 
 #define NO_ATTR -1
 

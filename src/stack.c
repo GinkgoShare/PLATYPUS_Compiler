@@ -16,10 +16,6 @@ Function list: [
 #define DEBUG
 #undef DEBUG
 
-#ifdef DEBUG
-#include "token.h"
-#endif
-
 /*******************************************************************************
 Purpose: Initialize a StackDescriptor structure on the program heap. 
 Author: Christopher JW Elliott, 040 570 022
@@ -76,9 +72,6 @@ pStack s_push(pStack const pSD, const void* elmnt) {
 	void *dest_addr;
 	short new_capacity;
 	if (!pSD && pSD->capacity == USHRT_MAX) return NULL;
-	#ifdef DEBUG
-	printf("Token code in s_push is %d\n", ((Token*)elmnt)->code);
-	#endif
 
 	if((pSD->elmnt_offset * pSD->elmnt_sz) == pSD->capacity) {
 		if (!pSD->mode) return NULL;
@@ -106,9 +99,6 @@ Algorithm: decrement elmnt_offset and return the pointed to element
 void* s_pop(pStack const pSD) {
 	if (!pSD || !pSD->elmnt_offset) return NULL;
 	pSD->elmnt_offset--;
-	#ifdef DEBUG
-	printf("Token code in s_pop is %d\n", ((Token*)pSD->elmnts + pSD->elmnt_offset * pSD->elmnt_sz)->code);
-	#endif
 	return (char*)pSD->elmnts + pSD->elmnt_offset * pSD->elmnt_sz;
 }
 /*******************************************************************************

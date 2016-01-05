@@ -1,5 +1,7 @@
 PLATYPUS {
-	IF(1 == 1 .AND. 1 == 0.0 .OR. 2 == 2)
+	str1% = "abcdef";
+	str2% = "ABCDEF";
+	IF(str1% > str2%)
 	THEN c=-(5.9);
    	ELSE {
    		c=-c;

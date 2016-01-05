@@ -15,7 +15,6 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 *******************************************************************************/
 #include <stdlib.h>
 #include <string.h>
-#include "buffer.h"
 #include "stable.h"
 
 #define DEBUG

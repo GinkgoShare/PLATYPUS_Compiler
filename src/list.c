@@ -14,10 +14,7 @@ Function list: [
 #include "list.h"
 
 #define DEBUG
-#undef DEBUG
-#ifdef DEBUG
-#include "token.h"
-#endif
+/*#undef DEBUG*/
 
 /*******************************************************************************
 Purpose: Initialize a ListDescriptor structure on the program heap. 
@@ -36,7 +33,7 @@ List* l_create(short init_capacity, short inc_factor, short elmnt_sz) {
 	List* pList;
 	if (init_capacity < 0 || elmnt_sz <= 0 || inc_factor <= 0) { return NULL; }
 
-	pList = (List*)calloc( 1, sizeof(List));
+	pList = (List*)calloc(1, sizeof(List));
 	if (!pList) return NULL;
 
 	/* set capacity and allocate memory */
@@ -52,6 +49,32 @@ List* l_create(short init_capacity, short inc_factor, short elmnt_sz) {
 	return pList;
 }
 /*******************************************************************************
+Purpose: Copies one list to another. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Called functions: [ realloc(), memcpy() ]
+Parameters: dest is the list that is being copied to, src is the list being
+			copied
+*******************************************************************************/
+List* l_copy(List* src) {
+	List* pList;
+	pList = (List*)calloc( 1, sizeof(List));
+	if (!pList) return NULL;
+
+	/* set capacity and allocate memory */
+	pList->capacity = src->capacity;
+	pList->elmnts = malloc(pList->capacity);
+	if (!pList->elmnts) {
+		free(pList);
+		return NULL;
+	}
+	memcpy(pList->elmnts, src->elmnts, src->capacity);
+	pList->elmnt_offset = src->elmnt_offset;
+	pList->inc_factor = src->inc_factor;
+	pList->elmnt_sz = src->elmnt_sz;
+	return pList;
+}
+/*******************************************************************************
 Purpose: Append a new item to the list. 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 29/12/2015
@@ -64,14 +87,12 @@ Algorithm: Check if the list is at its maximum capacity, check if the list is at
 		   storage, add element to the end of the list
 *******************************************************************************/
 void* l_add(List* const pLD, const void* elmnt) {
+	int new_capacity;
 	void* pLoc; void* dest_addr;
-	short new_capacity;
 	if (!pLD && pLD->capacity == INT_MAX) return NULL;
-	#ifdef DEBUG
-	printf("Token->code in l_add() = %d;\n", ((Token*)elmnt)->code);
-	#endif
+
 	if((pLD->elmnt_offset * pLD->elmnt_sz) == pLD->capacity) {
-		new_capacity = pLD->capacity + (pLD->inc_factor * pLD->elmnt_sz);
+		new_capacity = pLD->capacity + pLD->inc_factor * pLD->elmnt_sz;
 		if (new_capacity < 0) return NULL;
 		pLoc = realloc(pLD->elmnts, new_capacity);
 		if (pLoc == NULL) return NULL;
@@ -88,14 +109,36 @@ void* l_add(List* const pLD, const void* elmnt) {
 Purpose: Get the address of an element. 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 29/12/2015
-Called functions: [ realloc(), memcpy() ]
 Parameters: pLD is the ListDescriptor that is being appended to, index is the 
 			index of the element to return.
 Return value: returns the address at the specified index.
 *******************************************************************************/
 void* l_get(List* const pLD, const int index) {
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
-	return (char*)pLD->elmnts + (index * pLD->elmnt_sz);
+	return (char*)pLD->elmnts + index * pLD->elmnt_sz;
+}
+/*******************************************************************************
+Purpose: Iterates over the list. Proceeds with each individual call. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Parameters: pLD is the ListDescriptor that is being used to get
+Return value: returns the address of the get_offset index.
+*******************************************************************************/
+void* l_getnext(List* const pLD) {
+	void* elmnt;
+	if (!pLD) return NULL;
+	elmnt = (char*)pLD->elmnts + pLD->get_offset++ * pLD->elmnt_sz;
+	return elmnt;
+}
+/*******************************************************************************
+Purpose: Reports if this list has another iteration. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Parameters: pLD is the ListDescriptor that is queried
+Return value: returns 1 for true and 0 for false
+*******************************************************************************/
+int l_hasnext(List* const pLD) {
+	return (!pLD) ? R_FAIL_0 : (pLD->get_offset != pLD->elmnt_offset); 
 }
 /*******************************************************************************
 Purpose: Set's an already specified index with a new element. 
@@ -110,7 +153,7 @@ Algorithm: Make sure the specified index is within a valid range, store element
 void* l_set(List* const pLD, const int index, const void* elmnt) {
 	void *dest_addr;
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
-	dest_addr = (char*)pLD->elmnts + (index * pLD->elmnt_sz);
+	dest_addr = (char*)pLD->elmnts + index * pLD->elmnt_sz;
 	memcpy(dest_addr, elmnt, pLD->elmnt_sz);
 	return pLD;
 }
@@ -125,14 +168,14 @@ Return value: the adjusted size of the list
 Algorithm: Make sure the specified index is within a valid range, shift the
 		   following elements to the removed index position
 *******************************************************************************/
-int l_remove(List* const pLD, const int index) {
-	void* dest_addr; void* fllwng_elmnts;
+void* l_remove(List* const pLD, const int index, void* elmnt) {
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
+	pLD->elmnt_offset--;
+	/* copy element */
+	memcpy(elmnt, (char*)pLD->elmnts + index * pLD->elmnt_sz, pLD->elmnt_sz);
 	/* shift remaining elements */
-	dest_addr = (char*)pLD->elmnts + (index * pLD->elmnt_sz);
-	fllwng_elmnts = (char*)pLD->elmnts + ((index+1) * (pLD->elmnt_sz * (pLD->elmnt_offset - (index-1))));
-	memcpy(dest_addr, fllwng_elmnts, pLD->elmnt_sz);
-	return --(pLD->elmnt_offset);
+	memcpy((char*)pLD->elmnts + index * pLD->elmnt_sz, (char*)pLD->elmnts + (index+1) * pLD->elmnt_sz, (pLD->elmnt_offset - index) * pLD->elmnt_sz);
+	return elmnt;
 }
 /*******************************************************************************
 Purpose: Returns the current size of the list. 
@@ -142,7 +185,7 @@ Parameters: pLD is the ListDescriptor to find the size of
 Return value: the current size of the list
 *******************************************************************************/
 int l_size(List* const pLD) {
-	return (pLD == NULL) ? R_FAIL_1 : pLD->elmnt_offset;
+	return pLD == NULL ? R_FAIL_1 : pLD->elmnt_offset;
 }
 /*******************************************************************************
 Purpose: Returns true if the list is currently empty. 
@@ -151,8 +194,8 @@ History/Versions: Version 0.0.1 29/12/2015
 Parameters: pLD is the ListDescriptor to query
 Return value: true if the list is currently empty or null, false if otherwise
 *******************************************************************************/
-int l_isEmpty(List* const pLD) {
-	return (pLD == NULL) ? R_FAIL_1 : (pLD->elmnt_offset == 0);
+int l_isempty(List* const pLD) {
+	return pLD == NULL ? R_FAIL_1 : (pLD->elmnt_offset == 0);
 }
 /*******************************************************************************
 Purpose: resize the list to its current size plus one
@@ -168,7 +211,7 @@ Algorithm: set a temporary variable to reallocate new memory, try to reallocate
 *******************************************************************************/
 void* l_pack(List* const pLD) {
 	void* pLoc;
-	short new_capacity;
+	int new_capacity;
 	if (pLD == NULL || pLD->capacity == INT_MAX) return NULL;
 
 	if (pLD->capacity == ((pLD->elmnt_offset+1) * pLD->elmnt_sz)) return pLD; /* list is already packed */
@@ -185,12 +228,25 @@ Purpose: Reset list to its starting positions so data can be overridden
 Author: Christopher JW Elliott
 History/Versions: Version 0.0.1 15/09/2015
 Parameters: the address of the buffer to be reset
-Return value: returns an int with a value of -1 on failure and 1 for success
+Return value: returns an int with a value of 0 on failure and 1 for success
 *******************************************************************************/
 int l_reset(List* const pLD) {
-	if (pLD == NULL) { return R_FAIL_1; }
-	/*memset(pLD->elmnts, 0, pLD->capacty * pLD->elmnt_sz);*/
+	if (pLD == NULL) { return R_FAIL_0; }
 	pLD->elmnt_offset = 0;
+	pLD->get_offset = 0;
+	return 1;
+}
+/*******************************************************************************
+Purpose: Reset list to its starting get_offset position so data can be
+		 enumerated
+Author: Christopher JW Elliott
+History/Versions: Version 0.0.1 15/09/2015
+Parameters: the address of the buffer to be reset
+Return value: returns an int with a value of 0 on failure and 1 for success
+*******************************************************************************/
+int l_reset_iterable(List* const pLD) {
+	if (pLD == NULL) { return R_FAIL_0; }
+	pLD->get_offset = 0;
 	return 1;
 }
 /*******************************************************************************

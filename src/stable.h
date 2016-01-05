@@ -17,6 +17,8 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #ifndef STABLE_H_
 #define STABLE_H_
 
+#include "buffer.h"
+
 #define DEFAULT 0xFFF8		/* 1111 1111 1111 1000 */
 #define ITYPE 0x0004		/* 0000 0000 0000 0100 */
 #define FTYPE 0x0002		/* 0000 0000 0000 0010 */
