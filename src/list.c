@@ -14,7 +14,7 @@ Function list: [
 #include "list.h"
 
 #define DEBUG
-#undef DEBUG
+/*#undef DEBUG*/
 #ifdef DEBUG
 #include "token.h"
 #endif
@@ -36,7 +36,7 @@ List* l_create(short init_capacity, short inc_factor, short elmnt_sz) {
 	List* pList;
 	if (init_capacity < 0 || elmnt_sz <= 0 || inc_factor <= 0) { return NULL; }
 
-	pList = (List*)calloc( 1, sizeof(List));
+	pList = (List*)calloc(1, sizeof(List));
 	if (!pList) return NULL;
 
 	/* set capacity and allocate memory */
@@ -49,6 +49,32 @@ List* l_create(short init_capacity, short inc_factor, short elmnt_sz) {
 
 	pList->inc_factor = inc_factor;
 	pList->elmnt_sz = elmnt_sz;
+	return pList;
+}
+/*******************************************************************************
+Purpose: Copies one list to another. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Called functions: [ realloc(), memcpy() ]
+Parameters: dest is the list that is being copied to, src is the list being
+			copied
+*******************************************************************************/
+List* l_copy(List* src) {
+	List* pList;
+	pList = (List*)calloc( 1, sizeof(List));
+	if (!pList) return NULL;
+
+	/* set capacity and allocate memory */
+	pList->capacity = src->capacity;
+	pList->elmnts = malloc(pList->capacity);
+	if (!pList->elmnts) {
+		free(pList);
+		return NULL;
+	}
+	memcpy(pList->elmnts, src->elmnts, src->capacity);
+	pList->elmnt_offset = src->elmnt_offset;
+	pList->inc_factor = src->inc_factor;
+	pList->elmnt_sz = src->elmnt_sz;
 	return pList;
 }
 /*******************************************************************************
@@ -86,7 +112,6 @@ void* l_add(List* const pLD, const void* elmnt) {
 Purpose: Get the address of an element. 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 29/12/2015
-Called functions: [ realloc(), memcpy() ]
 Parameters: pLD is the ListDescriptor that is being appended to, index is the 
 			index of the element to return.
 Return value: returns the address at the specified index.
@@ -94,6 +119,31 @@ Return value: returns the address at the specified index.
 void* l_get(List* const pLD, const int index) {
 	if (!pLD || index < 0 || index >= pLD->elmnt_offset) return NULL;
 	return (char*)pLD->elmnts + index * pLD->elmnt_sz;
+}
+/*******************************************************************************
+Purpose: Iterates over the list. Proceeds with each individual call. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Parameters: pLD is the ListDescriptor that is being used to get
+Return value: returns the address of the get_offset index.
+*******************************************************************************/
+void* l_getnext(List* const pLD) {
+	void* elmnt;
+	if (!pLD) return NULL;
+	pLD->get_offset = pLD->get_offset % pLD->elmnt_offset;
+	elmnt = (char*)pLD->elmnts + pLD->get_offset * pLD->elmnt_sz;
+	pLD->get_offset++;
+	return elmnt;
+}
+/*******************************************************************************
+Purpose: Reports if this list has another iteration. 
+Author: Christopher JW Elliott, 040 570 022
+History/Versions: Version 0.0.1 29/12/2015
+Parameters: pLD is the ListDescriptor that is queried
+Return value: returns 1 for true and 0 for false
+*******************************************************************************/
+int l_hasnext(List* const pLD) {
+	return (!pLD) ? R_FAIL_0 : (pLD->get_offset != pLD->elmnt_offset); 
 }
 /*******************************************************************************
 Purpose: Set's an already specified index with a new element. 
