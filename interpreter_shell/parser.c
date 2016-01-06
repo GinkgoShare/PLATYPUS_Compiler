@@ -14,6 +14,8 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #undef DEBUG
 #define DEBUG0
 #undef DEBUG0
+#define DEBUG1
+/*#undef DEBUG1*/
 
 #define get_num_value(op) ((op).code == AVID_T && st_get_type(sym_table, (op).attribute.vid_offset) == 'F' ? \
 						  sym_table.pstvr[(op).attribute.vid_offset].i_value.fpl_val : \
@@ -91,11 +93,14 @@ Author: Sv.Ranev
 void parser(Buffer * in_buf) {
 	execute = 1;
 	sc_buf = in_buf;
+	save_tkns = reuse_tkns = 0;
 	asgn_stmt_asys = unry_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	iterable = l_create(10, 10, sizeof(Token));
+	reusable_tkns = l_create(10, 10, sizeof(Token));
 	operators = s_create(10, 10, sizeof(Token), 'a');
 	program(); match(SEOF_T, NO_ATTR);
+	l_destroy(reusable_tkns);
 	s_destroy(operators);
 	l_destroy(iterable);
 }
@@ -109,6 +114,7 @@ Parameters: int pr_token_code, int pr_token_attribute
 Return value: void
 *******************************************************************************/
 static void match(int pr_token_code, int pr_token_attribute) {
+	if (save_tkns) l_add(reusable_tkns, &lookahead);
 	if (lookahead.code == pr_token_code) {
 		if (lookahead.code == SEOF_T) return;
 		switch(pr_token_code) {
@@ -189,7 +195,9 @@ static void match(int pr_token_code, int pr_token_attribute) {
 				s_push(operators, &lookahead);
 				break;
 		}
-		if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
+		if (reuse_tkns) {
+			if (l_hasnext(reusable_tkns)) lookahead = *(Token*)l_getnext(reusable_tkns);
+		} else if (!(lookahead = mlwpar_next_token(sc_buf)).code) { /* code equals ERR_T */
 			syn_printe();
 			lookahead = mlwpar_next_token(sc_buf);
 			++synerrno;
@@ -424,7 +432,7 @@ static void selection_statement(void) {
 */
 static void iteration_statement(void) {
 	List *cond_exp, *assgn_exp;
-	int istrue, execute_chain = execute, retract_mark;
+	int istrue, execute_chain = execute;
 	match(KW_T, USING); match(LPR_T, NO_ATTR);
 	assignment_expression(); match(COM_T, NO_ATTR);
 	conditional_expression(); cond_exp = l_copy(iterable);
@@ -434,26 +442,30 @@ static void iteration_statement(void) {
 	assignment_expression();
 	assgn_exp = l_copy(iterable);
 	execute = execute_chain;
-	match(RPR_T, NO_ATTR); match(KW_T, REPEAT);
-	/* set marker before reading first token of opt_statements */
-	retract_mark = b_getc_offset(sc_buf);
-	match(LBR_T, NO_ATTR);
+	match(RPR_T, NO_ATTR); match(KW_T, REPEAT); match(LBR_T, NO_ATTR);
 	if (!istrue) { /* parse but do not execute statement */
 		execute = 0;
 		opt_statements();
 	} else { /* parse while executing statement */
-		for (b_setmark(sc_buf, retract_mark); istrue ; b_setmark(sc_buf, retract_mark)) {
-			b_retract_to_mark(sc_buf);
-			lookahead = mlwpar_next_token(sc_buf);
+		Token tkn_chain;
+		save_tkns = 1;
+		opt_statements();
+		save_tkns = 0; reuse_tkns = 1;
+		tkn_chain = lookahead;
+		/* HEAD */
+		for (evaluate_expression(assgn_exp), istrue = evaluate_expression(cond_exp).attribute.int_value,
+			lookahead = *(Token*)l_getnext(reusable_tkns); istrue ;
+			evaluate_expression(assgn_exp), istrue = evaluate_expression(cond_exp).attribute.int_value,
+			l_reset_iterator(reusable_tkns), lookahead = *(Token*)l_getnext(reusable_tkns)) {
+			/* BODY */
 			opt_statements();
-			evaluate_expression(assgn_exp);
-			istrue = evaluate_expression(cond_exp).attribute.int_value;
 		}
+		lookahead = tkn_chain;
+		l_reset(reusable_tkns);
+		reuse_tkns = 0;
 	}
-	
 	match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
-	l_destroy(cond_exp);
-	l_destroy(assgn_exp);
+	l_destroy(assgn_exp); l_destroy(cond_exp);
 	execute = execute_chain;
 }
 /*

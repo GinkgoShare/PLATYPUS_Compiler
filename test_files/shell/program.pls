@@ -34,4 +34,15 @@ PLATYPUS {
 			ELSE{};
 		ELSE{};
 	ELSE{};
+	a = 5;
+	INPUT(b);
+	b = b*b;
+	OUTPUT(b); OUTPUT();
+	IF(1==2)
+	THEN OUTPUT("End of IF statement"); OUTPUT();
+	ELSE{
+		OUTPUT("End of ELSE statement"); OUTPUT();
+	};
+	INPUT(a,b,c%);
+	OUTPUT(a,b,c%); OUTPUT();
 }
