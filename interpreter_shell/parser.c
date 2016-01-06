@@ -12,6 +12,8 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 
 #define DEBUG
 #undef DEBUG
+#define DEBUG0
+#undef DEBUG0
 
 #define get_num_value(op) ((op).code == AVID_T && st_get_type(sym_table, (op).attribute.vid_offset) == 'F' ? \
 						  sym_table.pstvr[(op).attribute.vid_offset].i_value.fpl_val : \
@@ -216,6 +218,9 @@ Author: Sv.Ranev
 static void syn_printe(void) {
 	Token t = lookahead;
 	asgn_stmt_asys = execute = 0;
+#ifdef DEBUG
+printf("execute is %d\n", execute);
+#endif
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
 	printf("*****  Token code:%3d Attribute: ",t.code);
 	switch(t.code){
@@ -434,7 +439,6 @@ static void iteration_statement(void) {
 	if (!istrue) { /* parse but do not execute statement */
 		execute = 0;
 		opt_statements();
-		execute = execute_chain;
 	} else { /* parse while executing statement */
 		for (b_setmark(sc_buf, retract_mark); istrue ; b_setmark(sc_buf, retract_mark)) {
 			b_retract_to_mark(sc_buf);
@@ -453,13 +457,16 @@ static void iteration_statement(void) {
 /*
 *	<input statement>			-> INPUT ( <variable list> ) ;
 *	FIRST(<input statement>)	=  { INPUT }
-*   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
+*   Authors: Christopher Elliott, 040 570 022
 */
 static void input_statement(void) {
 	l_reset(iterable);
 	s_reset(operators);
 	match(KW_T, INPUT); match(LPR_T, NO_ATTR); variable_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	/* evaluate expression */
+#ifdef DEBUG
+printf("execute is %d\n", execute);
+#endif
 	if (execute) exp_value = evaluate_expression(iterable);
 }
 /*
@@ -493,7 +500,7 @@ static void variable_identifier(void) {
 /*
 *	<output statement>			-> OUTPUT ( <output list> );
 *	FIRST(<output statement>)	=  { OUTPUT }
-*   Authors: Christopher Elliott, 040 570 022 and Jeremy Chen, 040 742 822
+*   Authors: Christopher Elliott
 */
 static void output_statement(void) {
 	l_reset(iterable);
@@ -1027,11 +1034,11 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 						switch (tkn->code) {
 							case AVID_T:
 								if (st_get_type(sym_table, tkn->attribute.vid_offset) == 'F')
-									printf(l_hasnext(iterable) ? "%f, " : "%f", sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val);
-								else printf(l_hasnext(iterable) ? "%d, " : "%d", sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val);
+									printf(l_hasnext(iterable) ? "%f," : "%f", sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val);
+								else printf(l_hasnext(iterable) ? "%d," : "%d", sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val);
 								break;
 							case SVID_T:
-								printf(l_hasnext(iterable) == 1 ? "%s, " : "%s", b_setmark(str_LTBL, sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset));
+								printf(l_hasnext(iterable) == 1 ? "%s," : "%s", b_setmark(str_LTBL, sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset));
 								break;
 							case STR_T:
 								printf("%s", b_setmark(str_LTBL, tkn->attribute.str_offset));
@@ -1043,11 +1050,14 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 				char ch;
 				Token literal;
 				Buffer* var_list = b_create(10, 10, 'a');
-				while ((ch = getchar()) != '\n') b_addc(var_list, ch);
-				b_addc(var_list, '\0');
+				while ((ch = getchar()) != '\n' & b_addc(var_list, ch) != NULL) ;
 				while (l_hasnext(iterable)) {
 					tkn = (Token*)l_getnext(iterable);
-					while ((literal = mlwpar_next_token(var_list)).code == COM_T) ;
+					do literal = mlwpar_next_token(var_list);
+					while (literal.code == COM_T) ;
+#ifdef DEBUG0
+printf("literal code is %d\n", literal.code);
+#endif
 					if (literal.code == SEOF_T) {
 						printf("***NOT ENOUGH ARGUMENTS RECEIVED***\n");
 						l_reset_iterable(iterable);
