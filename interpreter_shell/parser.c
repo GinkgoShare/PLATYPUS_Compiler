@@ -33,9 +33,11 @@ static Token lookahead;
 static Token exp_value;
 static Stack* operators;
 static List* iterable;
+static List* reusable_tkns;
 
 int synerrno;
-int asgn_stmt_asys, execute, unry_asys;
+int asgn_stmt_asys, unry_asys;
+int save_tkns, reuse_tkns, execute;
 
 /* static function declarations */
 static void match(int, int);
@@ -865,7 +867,7 @@ printf("In ART_OP_T\n");
 					/* divide by zero will break out of evaluation and print the error to console */
 					if (tkn->attribute.arr_op == DIV && (op2->code == AVID_T && !sym_table.pstvr[op2->attribute.vid_offset].i_value.int_val || !op2->attribute.int_value)) {
 						printf("***CANNOT DIVIDE BY ZERO***\n");
-						l_reset_iterable(iterable);
+						l_reset_iterator(iterable);
 						exp_val.code = ERR_T;
 						strcpy(exp_val.attribute.err_lex, "RUN TIME ERROR");
 						return exp_val;
@@ -1050,7 +1052,7 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 				char ch;
 				Token literal;
 				Buffer* var_list = b_create(10, 10, 'a');
-				while ((ch = getchar()) != '\n' & b_addc(var_list, ch) != NULL) ;
+				while (((ch = getchar()) != '\n') & (b_addc(var_list, ch) != NULL)) ;
 				while (l_hasnext(iterable)) {
 					tkn = (Token*)l_getnext(iterable);
 					do literal = mlwpar_next_token(var_list);
@@ -1060,7 +1062,7 @@ printf("literal code is %d\n", literal.code);
 #endif
 					if (literal.code == SEOF_T) {
 						printf("***NOT ENOUGH ARGUMENTS RECEIVED***\n");
-						l_reset_iterable(iterable);
+						l_reset_iterator(iterable);
 						exp_val.code = ERR_T;
 						strcpy(exp_val.attribute.err_lex, "RUN TIME ERROR");
 						return exp_val;
@@ -1079,7 +1081,7 @@ printf("literal code is %d\n", literal.code);
 			s_push(exp_stck, &exp_val);
 		}
 	} /* END EXPRESSION EVALUATION LOOP */
-	l_reset_iterable(iterable);
+	l_reset_iterator(iterable);
 	return *(Token*)s_pop(exp_stck);
 }
 /*******************************************************************************

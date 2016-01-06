@@ -244,7 +244,7 @@ History/Versions: Version 0.0.1 15/09/2015
 Parameters: the address of the buffer to be reset
 Return value: returns an int with a value of 0 on failure and 1 for success
 *******************************************************************************/
-int l_reset_iterable(List* const pLD) {
+int l_reset_iterator(List* const pLD) {
 	if (pLD == NULL) { return R_FAIL_0; }
 	pLD->get_offset = 0;
 	return 1;
