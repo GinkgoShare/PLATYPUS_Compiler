@@ -15,7 +15,9 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #define DEBUG0
 #undef DEBUG0
 #define DEBUG1
-/*#undef DEBUG1*/
+#undef DEBUG1
+#define DBG_PARSER
+/* #undef DEBUG1 */
 
 #define get_num_value(op) ((op).code == AVID_T && st_get_type(sym_table, (op).attribute.vid_offset) == 'F' ? \
 						  sym_table.pstvr[(op).attribute.vid_offset].i_value.fpl_val : \
@@ -27,17 +29,17 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 extern STD sym_table;								/* Symbol Table Descriptor */
 extern Buffer * str_LTBL;							/* String literal table */
 extern int line;									/* source code line numbers - defined in scanner.c */
-extern char * kw_table[];
-extern Token mlwpar_next_token(Buffer * sc_buf);
+extern char * kw_table[];							/* Keyword lookup table */
+extern Token mlwpar_next_token(Buffer * sc_buf);	
 
-static Buffer* sc_buf;
+static Buffer* sc_buf;								/*  */
 static Token lookahead;
 static Token exp_value;
 static Stack* operators;
 static List* iterable;
 static List* reusable_tkns;
 
-int synerrno;
+int synerrno, err_state;
 int asgn_stmt_asys, unry_asys;
 int save_tkns, reuse_tkns, execute;
 
@@ -93,13 +95,16 @@ Author: Sv.Ranev
 void parser(Buffer * in_buf) {
 	execute = 1;
 	sc_buf = in_buf;
-	save_tkns = reuse_tkns = 0;
+	err_state = save_tkns = reuse_tkns = 0;
 	asgn_stmt_asys = unry_asys = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	iterable = l_create(10, 10, sizeof(Token));
 	reusable_tkns = l_create(10, 10, sizeof(Token));
 	operators = s_create(10, 10, sizeof(Token), 'a');
 	program(); match(SEOF_T, NO_ATTR);
+#ifdef DBG_PARSER
+gen_incode("PLATY: Source file parsed");
+#endif
 	l_destroy(reusable_tkns);
 	s_destroy(operators);
 	l_destroy(iterable);
@@ -227,10 +232,7 @@ Author: Sv.Ranev
 */
 static void syn_printe(void) {
 	Token t = lookahead;
-	asgn_stmt_asys = execute = 0;
-#ifdef DEBUG
-printf("execute is %d\n", execute);
-#endif
+	err_state = 1;
 	printf("PLATY: Syntax error:  Line:%3d\n",line);
 	printf("*****  Token code:%3d Attribute: ",t.code);
 	switch(t.code){
@@ -314,6 +316,9 @@ static void gen_incode(char* string) {
 static void program(void){
 	match(KW_T,PLATYPUS); match(LBR_T,NO_ATTR); 
 	opt_statements(); match(RBR_T,NO_ATTR);
+#ifdef DBG_PARSER
+gen_incode("PLATY: Program parsed");
+#endif
 }
 /*
 *	<opt statements> 		-> <statements> | e
@@ -329,6 +334,10 @@ static void opt_statements(void) {
 		&& lookahead.attribute.get_int != ELSE
 		&& lookahead.attribute.get_int != THEN
 		&& lookahead.attribute.get_int != REPEAT) { statements(); break; }
+	default:
+#ifdef DBG_PARSER
+gen_incode("PLATY: Opt_statements parsed");
+#endif
 	}
 }
 /*
@@ -385,6 +394,9 @@ static void statement(void) {
 static void assignment_statement(void) {
 	asgn_stmt_asys = 1;
 	assignment_expression(); match(EOS_T, NO_ATTR);
+#ifdef DBG_PARSER
+gen_incode("PLATY: Assignment statement parsed");
+#endif
 	asgn_stmt_asys = 0;
 }
 /*
@@ -397,14 +409,20 @@ static void assignment_expression(void) {
 	s_reset(operators);
 	if (lookahead.code == AVID_T) {
 		match(AVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); arithmetic_expression();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Assignment expression (arithmetic) parsed");
+#endif
 	} else if (lookahead.code == SVID_T) {
 		match(SVID_T, NO_ATTR); match(ASS_OP_T, NO_ATTR); string_expression();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Assignment expression (string) parsed");
+#endif
 	} else {
 		syn_printe();
 	}
 	/* unload remaining operators off stack to expression list */
 	while (!s_isempty(operators)) l_add(iterable, s_pop(operators));
-	if (execute) exp_value = evaluate_expression(iterable);
+	if (execute && !err_state) exp_value = evaluate_expression(iterable);
 }
 /*
 *	<selection statement>			-> IF ( <conditional expression> ) THEN <opt statments>
@@ -416,11 +434,14 @@ static void selection_statement(void) {
 	int execute_chain = execute;
 	match(KW_T, IF); match(LPR_T, NO_ATTR); conditional_expression(); 
 	match(RPR_T, NO_ATTR); match(KW_T, THEN);
-	if (execute_chain) execute = exp_value.attribute.int_value;
+	if (execute_chain && !err_state) execute = exp_value.attribute.int_value;
 	opt_statements(); match(KW_T, ELSE);
-	if (execute_chain) execute = !exp_value.attribute.int_value;
+	if (execute_chain && !err_state) execute = !exp_value.attribute.int_value;
 	match(LBR_T, NO_ATTR); opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	execute = execute_chain;
+#ifdef DBG_PARSER
+gen_incode("PLATY: IF statement parsed");
+#endif
 }
 /*
 *	<iteration statement> 			-> USING ( <assignment expression> , <conditional expression> , <assignment_expression> )
@@ -432,25 +453,25 @@ static void selection_statement(void) {
 */
 static void iteration_statement(void) {
 	List *cond_exp, *assgn_exp;
-	int istrue, execute_chain = execute;
+	int istrue = 0, execute_chain = execute;
 	match(KW_T, USING); match(LPR_T, NO_ATTR);
 	assignment_expression(); match(COM_T, NO_ATTR);
-	conditional_expression(); cond_exp = l_copy(iterable);
-	istrue = exp_value.attribute.int_value;
+	conditional_expression(); 
+	cond_exp = l_copy(iterable);
+	istrue = execute && !err_state ? exp_value.attribute.int_value : 0;
 	match(COM_T, NO_ATTR);
 	execute = 0;
 	assignment_expression();
 	assgn_exp = l_copy(iterable);
 	execute = execute_chain;
 	match(RPR_T, NO_ATTR); match(KW_T, REPEAT); match(LBR_T, NO_ATTR);
-	if (!istrue) { /* parse but do not execute statement */
+	if (!istrue || err_state) { /* parse but do not execute statement */
 		execute = 0;
 		opt_statements();
 	} else { /* parse while executing statement */
 		Token tkn_chain;
-		save_tkns = 1;
-		opt_statements();
-		save_tkns = 0; reuse_tkns = 1;
+		save_tkns = 1; opt_statements(); save_tkns = 0;
+		reuse_tkns = 1;
 		tkn_chain = lookahead;
 		/* HEAD */
 		for (evaluate_expression(assgn_exp), istrue = evaluate_expression(cond_exp).attribute.int_value,
@@ -460,13 +481,16 @@ static void iteration_statement(void) {
 			/* BODY */
 			opt_statements();
 		}
-		lookahead = tkn_chain;
 		l_reset(reusable_tkns);
+		lookahead = tkn_chain;
 		reuse_tkns = 0;
 	}
-	match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	l_destroy(assgn_exp); l_destroy(cond_exp);
 	execute = execute_chain;
+	match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
+#ifdef DBG_PARSER
+gen_incode("PLATY: USING statement parsed");
+#endif
 }
 /*
 *	<input statement>			-> INPUT ( <variable list> ) ;
@@ -477,11 +501,11 @@ static void input_statement(void) {
 	l_reset(iterable);
 	s_reset(operators);
 	match(KW_T, INPUT); match(LPR_T, NO_ATTR); variable_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
-	/* evaluate expression */
-#ifdef DEBUG
-printf("execute is %d\n", execute);
+#ifdef DBG_PARSER
+gen_incode("PLATY: INPUT statement parsed");
 #endif
-	if (execute) exp_value = evaluate_expression(iterable);
+	/* evaluate expression */
+	if (execute && !err_state) exp_value = evaluate_expression(iterable);
 }
 /*
 *	<variable list>			-> <variable identifier> <variable list p>
@@ -490,6 +514,9 @@ printf("execute is %d\n", execute);
 */
 static void variable_list(void) {
 	variable_identifier(); variable_list_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Variable list parsed");
+#endif
 }
 /*
 *	<variable list p>			-> , <variable identifier> <variable list p> | e
@@ -520,8 +547,11 @@ static void output_statement(void) {
 	l_reset(iterable);
 	s_reset(operators);
 	match(KW_T, OUTPUT); match(LPR_T, NO_ATTR); output_list(); match(RPR_T, NO_ATTR); match(EOS_T, NO_ATTR);
+#ifdef DBG_PARSER
+gen_incode("PLATY: OUTPUT statement parsed");
+#endif
 	/* evaluate expression */
-	if (execute) exp_value = evaluate_expression(iterable);
+	if (execute && !err_state) exp_value = evaluate_expression(iterable);
 }
 /*
 *	<output list>			-> <variable list> | STR_T | e
@@ -533,6 +563,9 @@ static void output_list(void) {
 	case AVID_T: case SVID_T: variable_list(); return;
 	case STR_T: match(STR_T, NO_ATTR); return;
 	}
+#ifdef DBG_PARSER
+gen_incode("PLATY: Output list (empty) parsed");
+#endif
 }
 /*
 *	<arithmetic expression>			-> <unary arithmetic expression> | <additive arrithmetic expression>
@@ -543,6 +576,9 @@ static void arithmetic_expression(void) {
 	if (lookahead.code == ART_OP_T && (lookahead.attribute.arr_op == PLUS || lookahead.attribute.arr_op == MINUS)) unary_arithmetic_expression();
 	else if (lookahead.code == AVID_T || lookahead.code == FPL_T || lookahead.code == INL_T || lookahead.code == LPR_T) additive_arithmetic_expression();
 	else { syn_printe(); return; }
+#ifdef DBG_PARSER
+gen_incode("PLATY: Arithmetic expression parsed");
+#endif
 }
 /*
 *	<unary arithmetic expression>			-> + <primary arithmetic expression> | - <primary arithmetic expression>
@@ -560,6 +596,9 @@ static void unary_arithmetic_expression(void) {
 		return;
 	}
 	primary_arithmetic_expression();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Unary arithmetic expression parsed");
+#endif
 }
 /*
 *	<additive arithmetic expression>		-> <multiplicative arithmetic expression> <additive arithmetic expression p>
@@ -579,8 +618,14 @@ static void additive_arithmetic_expression(void) {
 static void additive_arithmetic_expression_p(void) {
 	if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == PLUS) {
 		match(ART_OP_T, PLUS); multiplicative_arithmetic_expression(); additive_arithmetic_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Additive arithmetic expression parsed");
+#endif
 	} else if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == MINUS) {
 		match(ART_OP_T, MINUS); multiplicative_arithmetic_expression(); additive_arithmetic_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Additive arithmetic expression parsed");
+#endif
 	}
 }
 /*
@@ -601,8 +646,14 @@ static void multiplicative_arithmetic_expression(void) {
 static void multiplicative_arithmetic_expression_p(void) {
 	if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == MULT) {
 		match(ART_OP_T, MULT); primary_arithmetic_expression(); multiplicative_arithmetic_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Multiplicative arithmetic expression parsed");
+#endif
 	} else if (lookahead.code == ART_OP_T && lookahead.attribute.arr_op == DIV) {
 		match(ART_OP_T, DIV); primary_arithmetic_expression(); multiplicative_arithmetic_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Multiplicative arithmetic expression parsed");
+#endif
 	}
 }
 /*
@@ -618,6 +669,9 @@ static void primary_arithmetic_expression(void) {
 	case LPR_T: match(LPR_T, NO_ATTR); arithmetic_expression(); match(RPR_T, NO_ATTR); break;
 	default: syn_printe(); return;
 	}
+#ifdef DBG_PARSER
+gen_incode("PLATY: Primary arithmetic expression parsed");
+#endif
 }
 /*
 *	<string expression>			-> <primary string expression> <string expression p>
@@ -626,6 +680,9 @@ static void primary_arithmetic_expression(void) {
 */
 static void string_expression(void) {
 	primary_string_expression(); string_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: String expression parsed");
+#endif
 }
 /*
 *	<string expression p>			-> # <primary string expression> <string expression p> | e
@@ -646,6 +703,9 @@ static void primary_string_expression(void) {
 	if (lookahead.code == SVID_T) match(SVID_T, NO_ATTR);
 	else if (lookahead.code == STR_T) match(STR_T, NO_ATTR);
 	else { syn_printe(); return; }
+#ifdef DBG_PARSER
+gen_incode("PLATY: Primary string expression parsed");
+#endif
 }
 /*
 *	<conditional expression>		-> <logical OR expression>
@@ -656,10 +716,13 @@ static void conditional_expression(void) {
 	l_reset(iterable);
 	s_reset(operators);
 	logical_or_expression();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Conditional expression parsed");
+#endif
 	/* unload remaining operators off stack to expression list */
 	while (!s_isempty(operators)) l_add(iterable, s_pop(operators));
 	/* evaluate expression */
-	if (execute) exp_value = evaluate_expression(iterable);
+	if (execute && !err_state) exp_value = evaluate_expression(iterable);
 }
 /*
 *	<logical OR expression>			-> <logical AND expression> <logical OR expression p>
@@ -677,6 +740,9 @@ static void logical_or_expression(void) {
 static void logical_or_expression_p(void) {
 	if (lookahead.code == LOG_OP_T && lookahead.attribute.log_op == OR) {
 		match(LOG_OP_T, OR); logical_and_expression(); logical_or_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Logical OR expression parsed");
+#endif
 	}
 }
 /*
@@ -695,6 +761,9 @@ static void logical_and_expression(void) {
 static void logical_and_expression_p(void) {
 	if (lookahead.code == LOG_OP_T && lookahead.attribute.log_op == AND) {
 		match(LOG_OP_T, AND); relational_expression(); logical_and_expression_p();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Logical AND expression parsed");
+#endif
 	}
 }
 /*
@@ -714,6 +783,9 @@ static void relational_expression(void) {
 	default:
 		syn_printe();
 	}
+#ifdef DBG_PARSER
+gen_incode("PLATY: Relational expression parsed");
+#endif
 }
 /*
 *	<primary a_relational expression>			-> AVID_T | FPL_T | INL_T
@@ -731,6 +803,9 @@ static void primary_a_relational_expression(void) {
 	default:
 		syn_printe();
 	}
+#ifdef DBG_PARSER
+gen_incode("PLATY: Primary a_relational expression parsed");
+#endif
 }
 /*
 *	<primary a_relational expression p> 		-> == <primary a_relational expression>
@@ -764,6 +839,9 @@ static void primary_a_relational_expression_p(void) {
 */
 static void primary_s_relational_expression(void) {
 	primary_string_expression();
+#ifdef DBG_PARSER
+gen_incode("PLATY: Primary s_relational expression parsed");
+#endif
 }
 /*
 *	<primary s_relational expression p> 		-> == <primary s_relational expression>
@@ -1061,29 +1139,63 @@ printf("Tkn->attribute.log_op is %d: Op1 int value is %d and Op2 int value is %d
 					}
 				}
 			} else if (tkn->attribute.kwt_idx == INPUT) {
-				char ch;
-				Token literal;
+				char ch, str_type = 0;
 				Buffer* var_list = b_create(10, 10, 'a');
-				while (((ch = getchar()) != '\n') & (b_addc(var_list, ch) != NULL)) ;
+				do {
+					ch = getchar();
+					if (!str_type) {
+						if (ch == ' ') continue;
+						if (isalpha(ch)) str_type = 1;
+					}
+					if (ch == ',' || ch == '\n') {
+						str_type = 0;
+						b_addc(var_list, '\0');
+					} else b_addc(var_list, ch);
+				} while (ch != '\n');
 				while (l_hasnext(iterable)) {
 					tkn = (Token*)l_getnext(iterable);
-					do literal = mlwpar_next_token(var_list);
-					while (literal.code == COM_T) ;
-#ifdef DEBUG0
-printf("literal code is %d\n", literal.code);
-#endif
-					if (literal.code == SEOF_T) {
-						printf("***NOT ENOUGH ARGUMENTS RECEIVED***\n");
-						l_reset_iterator(iterable);
-						exp_val.code = ERR_T;
-						strcpy(exp_val.attribute.err_lex, "RUN TIME ERROR");
-						return exp_val;
-					}
-					if (tkn->code == AVID_T) {
-						if (st_get_type(sym_table, tkn->attribute.vid_offset) == 'F') sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val = (float)get_num_value(literal);
-						else sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val = (int)get_num_value(literal);
-					} else if (tkn->code == SVID_T) {
-						sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset = literal.attribute.str_offset;
+					if (!b_eob(var_list)) {
+						while (!(ch = b_getc(var_list)) && !b_eob(var_list)) printf("ch is %c\n", ch);
+						if (b_eob(var_list)) {
+							printf("***UNMATCHING INPUT***\n");
+							break;
+						}
+						if (tkn->code == AVID_T) {
+							if (st_get_type(sym_table, tkn->attribute.vid_offset) == 'F') {
+								/* -1 necessary because of previous call to b_getc() line 7 lines previous */
+								float value = atof(b_setmark(var_list, b_getc_offset(var_list)-1));
+								if ((value < MIN_FSZ || value > MAX_FSZ) && value != 0.0) {
+									printf("***UNMATCHING INPUT***\n");
+									while (b_getc(var_list) && !b_eob(var_list)) ;
+									break;
+								}
+								sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val = value;
+							} else {
+								short value;
+								char* str = b_setmark(var_list, b_getc_offset(var_list)-1);
+								/*if (isalpha(str[0]) || strlen(str) > INL_LEN) {
+									printf("***UNMATCHING INPUT***\n");
+									while (b_getc(var_list) && !b_eob(var_list)) ;
+									break;
+								}*/
+								value  = atoi(str);
+								/*if (value < MIN_ISZ || value > MAX_ISZ) {
+									printf("***UNMATCHING INPUT***\n");
+									while (b_getc(var_list) && !b_eob(var_list)) ;
+									break;
+								}*/
+								sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val = value;
+							}
+							while (b_getc(var_list)) ;
+						} else if (tkn->code == SVID_T) {
+							sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset = b_size(str_LTBL);
+							b_addc(str_LTBL, ch);
+							while ((ch = b_getc(var_list)) != '\0' && !b_eob(var_list)) b_addc(str_LTBL, ch);
+							if (!ch) b_addc(str_LTBL, ch);
+						}
+					} else {
+						printf("***UNMATCHING INPUT***\n");
+						break;
 					}
 				}
 				b_destroy(var_list);
