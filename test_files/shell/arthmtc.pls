@@ -5,4 +5,5 @@ PLATYPUS {
 	e = 4;
 	f = 5.0;
 	c = (-(d + e)) * f - ((d - e) * a) / f;
+	OUTPUT("c equals "); OUTPUT(c); OUTPUT();
 }

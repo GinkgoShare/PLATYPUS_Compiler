@@ -78,6 +78,13 @@ int main(int argc, char ** argv){
     err_printf("ERROR: Compiler is not ANSI C compliant!\n");
     exit(1);
   }
+  
+  /* make sure short is 2 bytes */
+  if (sizeof(short) != 2) {
+    err_printf("Date: %s  Time: %s",__DATE__, __TIME__);
+    err_printf("ERROR: Compiler must specify short as two bytes!\n");
+    exit(1);
+  }
 
 /*check for correct arrguments - source file name */
       if (argc <= 1){

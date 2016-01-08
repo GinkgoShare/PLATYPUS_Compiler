@@ -20,4 +20,40 @@ PLATYPUS {
 			i = -5;
 		};
 	};
+	a = 5;
+	IF(1==1)
+	THEN
+		IF(1==1)
+		THEN
+			IF(1==1)
+			THEN
+				IF(1==1)
+				THEN
+					IF(1==1)
+					THEN
+						IF(1==1)
+						THEN
+							IF(1==2)
+							THEN OUTPUT("End of IF statement"); OUTPUT();
+							ELSE{
+								OUTPUT("End of ELSE statement"); OUTPUT();
+							};
+						ELSE{
+							OUTPUT(a);OUTPUT();
+						};
+					ELSE{
+
+					};
+				ELSE{
+					OUTPUT(a);OUTPUT();
+				};
+			ELSE{
+
+			};
+		ELSE{
+			OUTPUT(a);OUTPUT();
+		};
+	ELSE{
+	
+	};
 }

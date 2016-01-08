@@ -23,10 +23,6 @@ Info: This program uses two main states of procedure. The err_states switches on
 
 #define DEBUG
 #undef DEBUG
-#define DEBUG0
-#undef DEBUG0
-#define DEBUG1
-#undef DEBUG1
 #define DBG_PARSER
 #undef DBG_PARSER
 
@@ -52,7 +48,7 @@ static Token lookahead;								/* token used in matching sequences */
 static Token exp_value;								/* token used for expression values */
 static Stack* operators;							/* stack used to arrange operators into reverse polish notation */
 static List* iterable;								/* a list used for expression evaluations and statement executions */
-static List* reusable_tkns;							/* a list to keep a token list to be reused in loop iterations */
+static List* reusable_tkns;							/* token list to be reused in loop iterations */
 
 /* trackers, flags and states */
 int synerrno, err_state;
@@ -118,6 +114,9 @@ void parser(Buffer * in_buf) {
 	iterable = l_create(10, 10, sizeof(Token));
 	reusable_tkns = l_create(10, 10, sizeof(Token));
 	operators = s_create(10, 10, sizeof(Token), 'a');
+#ifdef DBG_PARSER
+err_state = 1;
+#endif
 	program(); match(SEOF_T, NO_ATTR);
 #ifdef DBG_PARSER
 gen_incode("PLATY: Source file parsed");
@@ -468,14 +467,15 @@ gen_incode("PLATY: Assignment expression (string) parsed");
 */
 static void selection_statement(void) {
 	/* maintain the preceding global state of execution */
-	int execute_chain = execute;
-	match(KW_T, IF); match(LPR_T, NO_ATTR); conditional_expression(); 
+	int istrue = 0, execute_chain = execute;
+	match(KW_T, IF); match(LPR_T, NO_ATTR); conditional_expression();
+	if (execute_chain && !err_state) istrue = exp_value.attribute.int_value;
 	match(RPR_T, NO_ATTR); match(KW_T, THEN);
 	/* if execute_chain is true then the preceding execute state was 
 	true and expression value(exp_value) was set within conditional_expression() */
-	if (execute_chain && !err_state) execute = exp_value.attribute.int_value;
+	if (execute_chain && !err_state) execute = istrue;
 	opt_statements(); match(KW_T, ELSE);
-	if (execute_chain && !err_state) execute = !exp_value.attribute.int_value;
+	if (execute_chain && !err_state) execute = !istrue;
 	match(LBR_T, NO_ATTR); opt_statements(); match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 	/* maintain global state of execution */
 	execute = execute_chain;
@@ -953,7 +953,7 @@ static void execute_statement(List* iterable) {
 							else printf(l_hasnext(iterable) ? "%d," : "%d", sym_table.pstvr[tkn->attribute.vid_offset].i_value.int_val);
 							break;
 						case SVID_T:
-							printf(l_hasnext(iterable) == 1 ? "%s," : "%s", b_setmark(str_LTBL, sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset));
+							printf(l_hasnext(iterable) == 1 ? "%s," : "%s", b_setmark(str_LTBL,(short)sym_table.pstvr[tkn->attribute.vid_offset].i_value.str_offset));
 							break;
 						case STR_T:
 							printf("%s", b_setmark(str_LTBL, tkn->attribute.str_offset));
@@ -965,7 +965,7 @@ static void execute_statement(List* iterable) {
 			char ch, str_type = 0;
 			Buffer* var_list = b_create(10, 10, 'a');
 			do {
-				ch = getchar();
+				ch = (char)getchar();
 				if (!str_type) {
 					/* skip spaces outside of strings */
 					if (ch == ' ') continue;
@@ -987,14 +987,14 @@ static void execute_statement(List* iterable) {
 				if (tkn->code == AVID_T) {
 					if (st_get_type(sym_table, tkn->attribute.vid_offset) == 'F') {
 						/* -1 necessary because of previous call to b_getc() line 4 lines previous */
-						float value = atof(b_setmark(var_list, b_getc_offset(var_list)-1));
+						float value = atof(b_setmark(var_list, (short)(b_getc_offset(var_list)-1)));
 						if ((value < MIN_FSZ || value > MAX_FSZ) && value != 0.0)
 							print_ierr("***ARGUMENT VALUE IS NOT IN RANGE***\n", var_list);
 						sym_table.pstvr[tkn->attribute.vid_offset].i_value.fpl_val = value;
 					} else {
 						int value;
-						char* str = b_setmark(var_list, b_getc_offset(var_list)-1);
-						if (!isdigit(str[0]) || strlen(str) > INL_LEN)
+						char* str = b_setmark(var_list, (short)(b_getc_offset(var_list)-1));
+						if (!isdigit(str[0]))
 							print_ierr("***ARGUMENT MUST BE AN INTEGER***\n", var_list);
 						value = atol(str);
 						if (value < MIN_ISZ || value > MAX_ISZ) 
@@ -1035,7 +1035,7 @@ static Token evaluate_expression(List* iterable) {
 	Token exp_val;
 	Stack* exp_stck;
 	sz = l_size(iterable);
-	exp_stck = s_create(sz, 4, sizeof(Token), 'a');
+	exp_stck = s_create((short)sz, 4, (short)(unsigned short)sizeof(Token), 'a');
 	/* END PRE-CONDITIONS */
 
 	/* EXPRESSION EVALUATION LOOP */
@@ -1055,7 +1055,7 @@ static Token evaluate_expression(List* iterable) {
 printf("In SCC_OP_T\n");
 #endif
 					exp_val.code = STR_T;
-					exp_val.attribute.str_offset = concat_str(op1, op2);
+					exp_val.attribute.str_offset = (short)concat_str(op1, op2);
 					break;
 				case ASS_OP_T:
 #ifdef DEBUG
@@ -1065,7 +1065,7 @@ printf("In ASS_OP_T\n");
 					if (asgn_stmt_asys && sz == 3) {
 						char type = st_get_type(sym_table, op1->attribute.vid_offset);
 						if (type == 'I' && op2->code == FPL_T || type == 'F' && op2->code == INL_T) {
-							st_update_type(sym_table, op1->attribute.vid_offset, op2->code == INL_T ? 'I' : 'F');
+							st_update_type(sym_table, op1->attribute.vid_offset, (char)(op2->code == INL_T ? 'I' : 'F'));
 						}
 					}
 					{ /* Update value */
@@ -1087,7 +1087,8 @@ printf("In case 'F'\n");
 #ifdef DEBUG
 printf("In case 'S'\n");
 #endif
-								exp_val.attribute.str_offset = rval.str_offset = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+								rval.str_offset = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : (int)op2->attribute.str_offset;
+								exp_val.attribute.str_offset = (short)rval.str_offset;
 								break;
 						}
 						st_update_value(sym_table, op1->attribute.vid_offset, rval);
@@ -1099,7 +1100,9 @@ printf("In case 'S'\n");
 printf("In ART_OP_T\n");
 #endif
 					/* divide by zero will break out of evaluation and print the error to console */
-					if (tkn->attribute.arr_op == DIV && (op2->code == AVID_T && !sym_table.pstvr[op2->attribute.vid_offset].i_value.int_val || !op2->attribute.int_value)) {
+					if (tkn->attribute.arr_op == DIV && 
+						(op2->code == AVID_T && !sym_table.pstvr[op2->attribute.vid_offset].i_value.int_val 
+							|| op2->code == INL_T && !op2->attribute.int_value)) {
 						printf("***CANNOT DIVIDE BY ZERO***\n");
 						l_reset_iterator(iterable);
 						exp_val.code = ERR_T;
@@ -1222,8 +1225,8 @@ printf("int_val1 is %d and int_val2 is %d\n", int_val, (int)get_num_value(*op2))
 								break;
 						}
 					} else {
-						int str_offset1 = op1->code == SVID_T ? sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
-						int str_offset2 = op2->code == SVID_T ? sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
+						short str_offset1 = op1->code == SVID_T ? (short)sym_table.pstvr[op1->attribute.vid_offset].i_value.str_offset : op1->attribute.str_offset;
+						short str_offset2 = op2->code == SVID_T ? (short)sym_table.pstvr[op2->attribute.vid_offset].i_value.str_offset : op2->attribute.str_offset;
 						char *str1 = str_offset1 < 0 ? "" : b_setmark(str_LTBL, str_offset1);
 						char *str2 = str_offset2 < 0 ? "" : b_setmark(str_LTBL, str_offset2);
 						int ret = strcmp(str1, str2);
@@ -1285,13 +1288,13 @@ static int concat_str(Token* str1, Token* str2) {
 	/* string one */
 	mark = str1->code == SVID_T ? sym_table.pstvr[str1->attribute.vid_offset].i_value.str_offset : str1->attribute.str_offset;
 	if (mark >= 0) {
-		str = b_setmark(str_LTBL, mark);
+		str = b_setmark(str_LTBL, (short)mark);
 		for (i=0; str[i]; ++i) b_addc(str_LTBL, str[i]);
 	}
 	/* string two */
 	mark = str2->code == SVID_T ? sym_table.pstvr[str2->attribute.vid_offset].i_value.str_offset : str2->attribute.str_offset;
 	if (mark >= 0) {
-		str = b_setmark(str_LTBL, mark);
+		str = b_setmark(str_LTBL, (short)mark);
 		for (i=0; str[i]; ++i) b_addc(str_LTBL, str[i]);
 	}
 	b_addc(str_LTBL, '\0');
