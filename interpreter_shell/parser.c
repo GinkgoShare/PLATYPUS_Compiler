@@ -611,7 +611,11 @@ gen_incode("PLATY: OUTPUT statement parsed");
 static void output_list(void) {
 	switch(lookahead.code) {
 	case AVID_T: case SVID_T: variable_list(); return;
-	case STR_T: match(STR_T, NO_ATTR); return;
+	case STR_T: match(STR_T, NO_ATTR);
+#ifdef DBG_PARSER
+gen_incode("PLATY: Output list (string literal) parsed");
+#endif
+	return;
 	}
 #ifdef DBG_PARSER
 gen_incode("PLATY: Output list (empty) parsed");
