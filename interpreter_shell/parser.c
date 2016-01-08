@@ -47,13 +47,14 @@ extern int line;									/* source code line numbers - defined in scanner.c */
 extern char * kw_table[];							/* Keyword lookup table */
 extern Token mlwpar_next_token(Buffer * sc_buf);	
 
-static Buffer* sc_buf;								/*  */
-static Token lookahead;
-static Token exp_value;
-static Stack* operators;
-static List* iterable;
-static List* reusable_tkns;
+static Buffer* sc_buf;								/* BufferDescriptor contains the source file */
+static Token lookahead;								/* token used in matching sequences */
+static Token exp_value;								/* token used for expression values */
+static Stack* operators;							/* stack used to arrange operators into reverse polish notation */
+static List* iterable;								/* a list used for expression evaluations and statement executions */
+static List* reusable_tkns;							/* a list to keep a token list to be reused in loop iterations */
 
+/* trackers, flags and states */
 int synerrno, err_state;
 int asgn_stmt_asys, unry_asys;
 int save_tkns, reuse_tkns, execute;
