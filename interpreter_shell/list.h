@@ -44,6 +44,7 @@ int l_size(List* const pLD);
 int l_isempty(List* const pLD);
 void* l_pack(List* const pLD);
 int l_reset(List* const pLD);
+int l_set_iterator(List* const pLD, int offset);
 int l_reset_iterator(List* const pLD);
 void l_destroy(List* const pLD);
 
@@ -54,6 +55,7 @@ void l_destroy(List* const pLD);
 #define l_hasnext(pLD) (((List*)pLD) == NULL ? R_FAIL_0 : (((List*)pLD)->get_offset != ((List*)pLD)->elmnt_offset))
 #define l_size(pLD) (((List*)pLD) == NULL ? R_FAIL_1 : ((List*)pLD)->elmnt_offset)
 #define l_isempty(pLD) (((List*)pLD) == NULL ? R_FAIL_1 : (((List*)pLD)->elmnt_offset == 0))
+#define l_get_offset(pLD) (((List*)pLD == NULL) ? R_FAIL_0 : ((List*)pLD)->get_offset)
 #endif
 
 #endif

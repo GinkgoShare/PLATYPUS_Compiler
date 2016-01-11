@@ -108,8 +108,8 @@ Author: Christopher Elliott
 void parser(Buffer * in_buf) {
 	execute = 1;
 	sc_buf = in_buf;
-	err_state = save_tkns = reuse_tkns = 0;
 	asgn_stmt_asys = unry_asys = 0;
+	err_state = save_tkns = reuse_tkns = 0;
 	lookahead = mlwpar_next_token(sc_buf);
 	iterable = l_create(10, 10, sizeof(Token));
 	reusable_tkns = l_create(10, 10, sizeof(Token));
@@ -494,11 +494,13 @@ gen_incode("PLATY: IF statement parsed");
 static void iteration_statement(void) {
 	/* persist the conditional_expression and 
 	assignment_expression for repeated evaluations */
-	List *cond_exp, *assgn_exp;
-	int istrue, execute_chain = execute;
-	match(KW_T, USING); match(LPR_T, NO_ATTR);
+	List *cond_exp, *assgn_exp, *exp_chain;
+	int istrue, offset, execute_chain = execute;
+	match(KW_T, USING);
+	match(LPR_T, NO_ATTR);
 	/* evaluate the first assignment expression as normal */
-	assignment_expression(); match(COM_T, NO_ATTR);
+	assignment_expression();
+	match(COM_T, NO_ATTR);
 	/* evaluate the conditional expression as normal */
 	conditional_expression();
 	/* copy the current expression list to use later */
@@ -511,34 +513,57 @@ static void iteration_statement(void) {
 	/* copy the current expression list to use later */
 	assgn_exp = l_copy(iterable);
 	execute = execute_chain; /* revert to global execution state */
-	match(RPR_T, NO_ATTR); match(KW_T, REPEAT); match(LBR_T, NO_ATTR);
+	match(RPR_T, NO_ATTR);
+	match(KW_T, REPEAT);
+	offset = l_get_offset(reusable_tkns);
+	match(LBR_T, NO_ATTR);
 	if (!istrue || err_state) { /* parse but do not execute statement */
 		execute = 0;
 		opt_statements();
 	} else { /* parse while executing statement */
 		Token tkn_chain;
+		int save_tkns_chain = save_tkns,
+		reuse_tkns_chain = reuse_tkns;
+		if (!reuse_tkns_chain) {
+			exp_chain = l_copy(reusable_tkns);
+			l_destroy(reusable_tkns);
+			reusable_tkns = l_create(10, 10, sizeof(Token));
+		}
 		/* save tokens through first execution of REPEATing statements */
-		save_tkns = 1; opt_statements(); save_tkns = 0;
+		if (!reuse_tkns_chain) save_tkns = 1;
+		opt_statements();
+		save_tkns = 0;
+		/* copy the tkn_chain list to persist globally */
+		if (!reuse_tkns_chain) {
+			while(l_hasnext(reusable_tkns)) l_add(exp_chain, l_getnext(reusable_tkns));
+			l_reset_iterator(reusable_tkns);
+		}
 		reuse_tkns = 1; /* set reusing token state for match() */
 		/* save current token to reuse after execution loop */
 		tkn_chain = lookahead;
 		/* HEAD */
-		for (evaluate_expression(assgn_exp), istrue = evaluate_expression(cond_exp).attribute.int_value,
-			lookahead = *(Token*)l_getnext(reusable_tkns); /* CONDITION */istrue ;
-			evaluate_expression(assgn_exp), istrue = evaluate_expression(cond_exp).attribute.int_value,
-			l_reset_iterator(reusable_tkns), lookahead = *(Token*)l_getnext(reusable_tkns)) {
-			/* BODY */
+		evaluate_expression(assgn_exp);
+		istrue = evaluate_expression(cond_exp).attribute.int_value;
+		while (istrue) {
+			l_set_iterator(reusable_tkns, offset);
+			lookahead = *(Token*)l_getnext(reusable_tkns);
 			opt_statements();
+			evaluate_expression(assgn_exp);
+			istrue = evaluate_expression(cond_exp).attribute.int_value;
 		}
-		l_reset(reusable_tkns);
+		if (!reuse_tkns_chain) {
+			l_destroy(reusable_tkns);
+			reusable_tkns = l_copy(exp_chain);
+		}
 		lookahead = tkn_chain;
-		reuse_tkns = 0;
+		save_tkns = save_tkns_chain;
+		reuse_tkns = reuse_tkns_chain;
 	}
 	match(RBR_T, NO_ATTR); match(EOS_T, NO_ATTR);
 #ifdef DBG_PARSER
 gen_incode("PLATY: USING statement parsed");
 #endif
-	l_destroy(assgn_exp); l_destroy(cond_exp);
+	l_destroy(cond_exp); l_destroy(assgn_exp); l_destroy(exp_chain);
 	/* maintain global state of execution */
 	execute = execute_chain;
 } /* END ITERATION_STATEMENT() */

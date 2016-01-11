@@ -233,6 +233,18 @@ void* l_pack(List* const pLD) {
 	return pLD;
 }
 /*******************************************************************************
+Purpose: Gets the list get_offset member value.
+Author: Christopher JW Elliott
+History/Versions: Version 0.0.1 15/09/2015
+Parameters: the address of the buffer to be reset, the offset value
+Return value: returns an int with a value of 0 on failure and 1 for success
+*******************************************************************************/
+#ifndef INLINE
+int l_get_offset(List* const pLD) {
+	return (pLD == NULL) ? R_FAIL_0 : pLD->get_offset;
+}
+#endif
+/*******************************************************************************
 Purpose: Reset list to its starting positions so data can be overridden
 Author: Christopher JW Elliott
 History/Versions: Version 0.0.1 15/09/2015
@@ -256,6 +268,18 @@ Return value: returns an int with a value of 0 on failure and 1 for success
 int l_reset_iterator(List* const pLD) {
 	if (pLD == NULL) return R_FAIL_0;
 	pLD->get_offset = 0;
+	return 1;
+}
+/*******************************************************************************
+Purpose: Set list to get_offset position defined by offset parameter.
+Author: Christopher JW Elliott
+History/Versions: Version 0.0.1 15/09/2015
+Parameters: the address of the buffer to be reset, the offset value
+Return value: returns an int with a value of 0 on failure and 1 for success
+*******************************************************************************/
+int l_set_iterator(List* const pLD, int offset) {
+	if (pLD == NULL) return R_FAIL_0;
+	pLD->get_offset = offset;
 	return 1;
 }
 /*******************************************************************************
