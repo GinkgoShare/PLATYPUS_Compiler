@@ -145,7 +145,10 @@ Algorithm: If the save_tkns state is on the add lookahead to the reusable_tkns
 		   the reusable_tkns list otherwise call scanner for next token.
 *******************************************************************************/
 static void match(int pr_token_code, int pr_token_attribute) {
-	if (save_tkns) l_add(reusable_tkns, &lookahead);
+	if (save_tkns) {
+		l_add(reusable_tkns, &lookahead);
+		l_getnext(reusable_tkns);
+	}
 	if (lookahead.code == pr_token_code) {
 		if (lookahead.code == SEOF_T) return;
 		switch(pr_token_code) {
@@ -494,7 +497,8 @@ gen_incode("PLATY: IF statement parsed");
 static void iteration_statement(void) {
 	/* persist the conditional_expression and 
 	assignment_expression for repeated evaluations */
-	List *cond_exp, *assgn_exp, *exp_chain;
+	/*List *cond_exp, *assgn_exp, *exp_chain;*/
+	List *cond_exp, *assgn_exp;
 	int istrue, offset, execute_chain = execute;
 	match(KW_T, USING);
 	match(LPR_T, NO_ATTR);
@@ -524,20 +528,20 @@ static void iteration_statement(void) {
 		Token tkn_chain;
 		int save_tkns_chain = save_tkns,
 		reuse_tkns_chain = reuse_tkns;
-		if (!reuse_tkns_chain) {
+		/*if (!reuse_tkns_chain) {
 			exp_chain = l_copy(reusable_tkns);
 			l_destroy(reusable_tkns);
 			reusable_tkns = l_create(10, 10, sizeof(Token));
-		}
+		}*/
 		/* save tokens through first execution of REPEATing statements */
 		if (!reuse_tkns_chain) save_tkns = 1;
 		opt_statements();
 		save_tkns = 0;
 		/* copy the tkn_chain list to persist globally */
-		if (!reuse_tkns_chain) {
+		/*if (!reuse_tkns_chain) {
 			while(l_hasnext(reusable_tkns)) l_add(exp_chain, l_getnext(reusable_tkns));
 			l_reset_iterator(reusable_tkns);
-		}
+		}*/
 		reuse_tkns = 1; /* set reusing token state for match() */
 		/* save current token to reuse after execution loop */
 		tkn_chain = lookahead;
@@ -551,10 +555,10 @@ static void iteration_statement(void) {
 			evaluate_expression(assgn_exp);
 			istrue = evaluate_expression(cond_exp).attribute.int_value;
 		}
-		if (!reuse_tkns_chain) {
+		/*if (!reuse_tkns_chain) {
 			l_destroy(reusable_tkns);
 			reusable_tkns = l_copy(exp_chain);
-		}
+		}*/
 		lookahead = tkn_chain;
 		save_tkns = save_tkns_chain;
 		reuse_tkns = reuse_tkns_chain;
@@ -563,7 +567,7 @@ static void iteration_statement(void) {
 #ifdef DBG_PARSER
 gen_incode("PLATY: USING statement parsed");
 #endif
-	l_destroy(cond_exp); l_destroy(assgn_exp); l_destroy(exp_chain);
+	l_destroy(cond_exp); l_destroy(assgn_exp); /*l_destroy(exp_chain);*/
 	/* maintain global state of execution */
 	execute = execute_chain;
 } /* END ITERATION_STATEMENT() */
