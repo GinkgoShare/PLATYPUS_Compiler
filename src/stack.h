@@ -38,4 +38,11 @@ int s_isempty(Stack * const pSD);
 int s_reset(Stack * const pSD);
 void s_destroy(Stack * const pSD);
 
+#define INLINE
+/*#undef INLINE*/
+
+#ifdef INLINE
+#define s_isempty(pSD) ((((Stack*)pSD) == NULL) ? R_FAIL_1 : (((Stack*)pSD)->elmnt_offset == 0))
+#endif
+
 #endif

@@ -1,4 +1,5 @@
 PLATYPUS {
+	c = 5.4;
 	str1% = "abcdef";
 	str2% = "ABCDEF";
 	IF(str1% > str2%)
@@ -6,4 +7,5 @@ PLATYPUS {
    	ELSE {
    		c=-c;
    	};
+   	OUTPUT(c);OUTPUT();
 }

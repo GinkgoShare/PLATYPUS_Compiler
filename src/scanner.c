@@ -108,7 +108,7 @@ Token mlwpar_next_token(Buffer * sc_buf) {
 	int accept = NOAS;	/* type of state - initially not accepting */
 
 	for (;;) {
-		b_setmark(sc_buf, b_getc_offset(sc_buf));
+		b_setmark(sc_buf, (short)b_getc_offset(sc_buf));
 		c = b_getc(sc_buf);
 		switch (c) {
 		case '\0': case 0xFF:
@@ -480,13 +480,13 @@ Return value: error Token
 static Token set_err_t(unsigned int lex_len, Buffer* buffer) {
 	char c;
 	Token t;
-	unsigned int i;
+	int i;
 	if (buffer == NULL) { return run_time_err(); }
 	t.code = ERR_T;
 	b_retract_to_mark(buffer);
-	for (i = 0, c = b_getc(buffer); i < lex_len && c != '\0' && c != 0xFF; ++i, c = b_getc(buffer))
+	for (i = 0, c = b_getc(buffer); i < (int)lex_len && c != '\0' && c != 0xFF; ++i, c = b_getc(buffer))
 		t.attribute.err_lex[i] = (i < ERR_LEN-3) ? c : '.';
-	if (i == lex_len) { b_retract(buffer); }
+	if (i == (int)lex_len) b_retract(buffer);
 	t.attribute.err_lex[i] = '\0';
 	return t;
 }

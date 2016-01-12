@@ -12,13 +12,19 @@ Purpose:  Implements a Recursive Descent Predictive Parser for PLATYPUS
 #define PARSER_H_
 
 #include <stdlib.h>
+#include <ctype.h>
+#include "buffer.h"
+#include "stable.h"
 #include "token.h"
 #include "stack.h"
 #include "list.h"
-#include "stable.h"
-#include "buffer.h"
 
 #define NO_ATTR -1
+#define MAX_ISZ 32767		/* max range for a PLATYPUS int */
+#define MIN_ISZ (-32768)	/* min range for a PLATYPUS int */
+#define MAX_FSZ 3.4E+38		/* max range for a PLATYPUS float */
+#define MIN_FSZ 1.2E-38		/* min range for a PLATYPUS float */
+#define INL_MSK 0xFF
 
 typedef enum KeywordIndexes { ELSE, IF, INPUT, OUTPUT, PLATYPUS, REPEAT, THEN, USING } KW;
 

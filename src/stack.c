@@ -108,9 +108,11 @@ History/Versions: Version 0.0.1 07/12/2015
 Parameters: the address of the stack
 Return value: returns the value of elmnt_offset
 *******************************************************************************/
+#ifndef INLINE
 int s_isempty(Stack * const pSD) {
 	return (pSD == NULL) ? R_FAIL_1 : (pSD->elmnt_offset == 0);
 }
+#endif
 /*******************************************************************************
 Purpose: Resets the stack to its created form.
 Author: Christopher JW Elliott

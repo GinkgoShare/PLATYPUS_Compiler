@@ -7,14 +7,15 @@ Date: 29/12/2015 (DD/MM/YYYY)
 Professor: Sv. Ranev
 Purpose: Implement the list data structure.
 Function list: [
-	l_create(), l_add(), l_get(), l_remove(), l_set(), l_size(), 
-	l_isEmpty(), l_pack(), l_contains(), l_destroy()
+	l_create(), l_copy, l_add(), l_get(), l_getnext, l_hasnext, l_set(),
+	l_remove(), l_size(), l_isempty(), l_pack(), l_reset(), l_reset_iterator(),
+	l_destroy()
 ]
 *******************************************************************************/
 #include "list.h"
 
 #define DEBUG
-/*#undef DEBUG*/
+#undef DEBUG
 
 /*******************************************************************************
 Purpose: Initialize a ListDescriptor structure on the program heap. 
@@ -31,7 +32,7 @@ Algorithm: initialize the ListDescriptor structure, initialize embedded array
 *******************************************************************************/
 List* l_create(short init_capacity, short inc_factor, short elmnt_sz) {
 	List* pList;
-	if (init_capacity < 0 || elmnt_sz <= 0 || inc_factor <= 0) { return NULL; }
+	if (init_capacity < 0 || elmnt_sz <= 0 || inc_factor <= 0) return NULL;
 
 	pList = (List*)calloc(1, sizeof(List));
 	if (!pList) return NULL;
@@ -49,12 +50,14 @@ List* l_create(short init_capacity, short inc_factor, short elmnt_sz) {
 	return pList;
 }
 /*******************************************************************************
-Purpose: Copies one list to another. 
+Purpose: Copies and existing list to a new. 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 29/12/2015
-Called functions: [ realloc(), memcpy() ]
-Parameters: dest is the list that is being copied to, src is the list being
-			copied
+Called functions: [ calloc(), free(), memcpy() ]
+Parameters: src is the list to be copied
+Return value: returns the address of a new ListDescriptor structure on the heap
+Algorithm: initialize a ListDescriptor structure using the existing list's 
+		   members
 *******************************************************************************/
 List* l_copy(List* src) {
 	List* pList;
@@ -131,15 +134,17 @@ void* l_getnext(List* const pLD) {
 	return elmnt;
 }
 /*******************************************************************************
-Purpose: Reports if this list has another iteration. 
+Purpose: Reports if this list has another element for l_getnext(). 
 Author: Christopher JW Elliott, 040 570 022
 History/Versions: Version 0.0.1 29/12/2015
 Parameters: pLD is the ListDescriptor that is queried
 Return value: returns 1 for true and 0 for false
 *******************************************************************************/
+#ifndef INLINE
 int l_hasnext(List* const pLD) {
-	return (!pLD) ? R_FAIL_0 : (pLD->get_offset != pLD->elmnt_offset); 
+	return (!pLD) ? R_FAIL_0 : (pLD->get_offset != pLD->elmnt_offset);
 }
+#endif
 /*******************************************************************************
 Purpose: Set's an already specified index with a new element. 
 Author: Christopher JW Elliott, 040 570 022
@@ -184,9 +189,11 @@ History/Versions: Version 0.0.1 29/12/2015
 Parameters: pLD is the ListDescriptor to find the size of
 Return value: the current size of the list
 *******************************************************************************/
+#ifndef INLINE
 int l_size(List* const pLD) {
 	return pLD == NULL ? R_FAIL_1 : pLD->elmnt_offset;
 }
+#endif
 /*******************************************************************************
 Purpose: Returns true if the list is currently empty. 
 Author: Christopher JW Elliott, 040 570 022
@@ -194,9 +201,11 @@ History/Versions: Version 0.0.1 29/12/2015
 Parameters: pLD is the ListDescriptor to query
 Return value: true if the list is currently empty or null, false if otherwise
 *******************************************************************************/
+#ifndef INLINE
 int l_isempty(List* const pLD) {
 	return pLD == NULL ? R_FAIL_1 : (pLD->elmnt_offset == 0);
 }
+#endif
 /*******************************************************************************
 Purpose: resize the list to its current size plus one
 Author: Christopher JW Elliott
@@ -224,6 +233,18 @@ void* l_pack(List* const pLD) {
 	return pLD;
 }
 /*******************************************************************************
+Purpose: Gets the list get_offset member value.
+Author: Christopher JW Elliott
+History/Versions: Version 0.0.1 15/09/2015
+Parameters: the address of the buffer to be reset, the offset value
+Return value: returns an int with a value of 0 on failure and 1 for success
+*******************************************************************************/
+#ifndef INLINE
+int l_get_offset(List* const pLD) {
+	return (pLD == NULL) ? R_FAIL_0 : pLD->get_offset;
+}
+#endif
+/*******************************************************************************
 Purpose: Reset list to its starting positions so data can be overridden
 Author: Christopher JW Elliott
 History/Versions: Version 0.0.1 15/09/2015
@@ -231,7 +252,7 @@ Parameters: the address of the buffer to be reset
 Return value: returns an int with a value of 0 on failure and 1 for success
 *******************************************************************************/
 int l_reset(List* const pLD) {
-	if (pLD == NULL) { return R_FAIL_0; }
+	if (pLD == NULL) return R_FAIL_0;
 	pLD->elmnt_offset = 0;
 	pLD->get_offset = 0;
 	return 1;
@@ -244,9 +265,21 @@ History/Versions: Version 0.0.1 15/09/2015
 Parameters: the address of the buffer to be reset
 Return value: returns an int with a value of 0 on failure and 1 for success
 *******************************************************************************/
-int l_reset_iterable(List* const pLD) {
-	if (pLD == NULL) { return R_FAIL_0; }
+int l_reset_iterator(List* const pLD) {
+	if (pLD == NULL) return R_FAIL_0;
 	pLD->get_offset = 0;
+	return 1;
+}
+/*******************************************************************************
+Purpose: Set list to get_offset position defined by offset parameter.
+Author: Christopher JW Elliott
+History/Versions: Version 0.0.1 15/09/2015
+Parameters: the address of the buffer to be reset, the offset value
+Return value: returns an int with a value of 0 on failure and 1 for success
+*******************************************************************************/
+int l_set_iterator(List* const pLD, int offset) {
+	if (pLD == NULL) return R_FAIL_0;
+	pLD->get_offset = offset;
 	return 1;
 }
 /*******************************************************************************
@@ -258,7 +291,7 @@ Parameters: the list to free
 *******************************************************************************/
 void l_destroy(List* const pLD) {
 	if (pLD) {
-		if (pLD->elmnts != NULL) { free(pLD->elmnts); }
+		if (pLD->elmnts != NULL) free(pLD->elmnts);
 		free(pLD); 
 	}
 }

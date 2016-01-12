@@ -18,7 +18,7 @@ Function list: st_create(), st_install(), st_lookup(), st_update_type(),
 #include "stable.h"
 
 #define DEBUG
-/*#undef DEBUG*/
+#undef DEBUG
 
 extern STD sym_table; /* global sym_table variable */
 
@@ -83,15 +83,15 @@ int st_install(STD sym_table, char *lexeme, char type, int line) {
 		switch (type) {
 		case 'I':
 			record.i_value.int_val = 0;
-			record.status_field = record.status_field | ITYPE;
+			record.status_field = (unsigned short)(record.status_field | ITYPE);
 			break;
 		case 'F':
 			record.i_value.fpl_val = 0.0F;
-			record.status_field = record.status_field | FTYPE;
+			record.status_field = (unsigned short)(record.status_field | FTYPE);
 			break;
 		case 'S':
 			record.i_value.str_offset = EPSILON;
-			record.status_field = record.status_field | STYPE;
+			record.status_field = (unsigned short)(record.status_field | STYPE);
 			break;
 		default:
 			return R_FAIL_1;
@@ -99,9 +99,9 @@ int st_install(STD sym_table, char *lexeme, char type, int line) {
 		for (i = 0, len = (int)strlen(lexeme); i <= len && b_addc(sym_table.plsBD, lexeme[i]); i++) { /* add lexeme to buffer descriptor member */
 			if (b_rflag(sym_table.plsBD)) {
 				/* use b_setmark() to set the mark of the buffer and return the char * to be assigned to plex and for strlen() */
-				for (b_setmark(sym_table.plsBD, 0), j = 0; j < sym_table.st_offset; sym_table.pstvr[j].plex = b_setmark(sym_table.plsBD, b_mark(sym_table.plsBD)),
-					b_setmark(sym_table.plsBD, (short)(b_mark(sym_table.plsBD) + strlen(b_setmark(sym_table.plsBD, b_mark(sym_table.plsBD))) + 1)), ++j) ;
-				record.plex = b_setmark(sym_table.plsBD, b_mark(sym_table.plsBD)); /* change plex of the current entry after realigning previous */
+				for (b_setmark(sym_table.plsBD, 0), j = 0; j < sym_table.st_offset; sym_table.pstvr[j].plex = b_setmark(sym_table.plsBD, (short)b_mark(sym_table.plsBD)),
+					b_setmark(sym_table.plsBD, (short)(b_mark(sym_table.plsBD) + strlen(b_setmark(sym_table.plsBD, (short)b_mark(sym_table.plsBD))) + 1)), ++j) ;
+				record.plex = b_setmark(sym_table.plsBD, (short)b_mark(sym_table.plsBD)); /* change plex of the current entry after realigning previous */
 			}
 		}
 		if (i <= len) return R_FAIL_1; /* this means that previous loop broke because b_addc() failed */
@@ -143,9 +143,9 @@ int st_update_type(STD sym_table, int vid_offset, char v_type) {
 	if (!sym_table.st_size || vid_offset < 0) return R_FAIL_1;
 	switch (v_type) {
 	case 'I': case 'F':
-		shft_val = sym_table.pstvr[vid_offset].status_field << BIT_SHFT;
+		shft_val = (short)(sym_table.pstvr[vid_offset].status_field << BIT_SHFT);
 		if (shft_val) return R_FAIL_1;
-		sym_table.pstvr[vid_offset].status_field = sym_table.pstvr[vid_offset].status_field ^ XOR_MASK;
+		sym_table.pstvr[vid_offset].status_field = (unsigned short)(sym_table.pstvr[vid_offset].status_field ^ XOR_MASK);
 		return vid_offset;
 	default:
 		return R_FAIL_1;
@@ -366,20 +366,20 @@ static int buffer_sort(void) {
 	pBuffer sort_buf;
 	if (!sym_table.st_size) return R_FAIL_1;
 	sort_buf = b_create(b_size(sym_table.plsBD), (char)b_inc_factor(sym_table.plsBD),
-		(b_mode(sym_table.plsBD) == ADDITIVE) ? 'a' : (b_mode(sym_table.plsBD) == MULTIPLICATIVE) ? 'm' : 'f'); /* create new buffer */
+		(char)((b_mode(sym_table.plsBD) == ADDITIVE) ? 'a' : (b_mode(sym_table.plsBD) == MULTIPLICATIVE) ? 'm' : 'f')); /* create new buffer */
 	if (!sort_buf) return R_FAIL_1;
 	for (i = 0; i < sym_table.st_offset; ++i) { /* loop through sorted entries */
 		for (j = 0; j <= (len = strlen(sym_table.pstvr[i].plex)) && b_addc(sort_buf, sym_table.pstvr[i].plex[j]); ++j) { /* transfer each lexeme to new sorted buffer */
 			if (b_rflag(sort_buf)) { /* b_setmark() is used to set mark and to return a char * to assign to plex and as an inout parameter for strlen() */
-				for (b_setmark(sort_buf, 0), k = 0; k < i; sym_table.pstvr[k].plex = b_setmark(sort_buf, b_mark(sort_buf)),
-					b_setmark(sort_buf, (short)(b_mark(sort_buf) + strlen(b_setmark(sort_buf, b_mark(sort_buf))) + 1)), ++k) ;
+				for (b_setmark(sort_buf, 0), k = 0; k < i; sym_table.pstvr[k].plex = b_setmark(sort_buf, (short)b_mark(sort_buf)),
+					b_setmark(sort_buf, (short)(b_mark(sort_buf) + strlen(b_setmark(sort_buf, (short)b_mark(sort_buf))) + 1)), ++k) ;
 			}
 		}
 		if (j <= len) { /* this means that b_addc() failed which broke the loop */
 			free(sort_buf);
 			return R_FAIL_1;
 		}
-		sym_table.pstvr[i].plex = b_setmark(sort_buf, b_mark(sort_buf));
+		sym_table.pstvr[i].plex = b_setmark(sort_buf, (short)b_mark(sort_buf));
 		b_setmark(sort_buf, (short)(b_mark(sort_buf) + len + 1)); /* increment the buffer's mark_offset for next entry */
 	}
 	free(sym_table.plsBD);
